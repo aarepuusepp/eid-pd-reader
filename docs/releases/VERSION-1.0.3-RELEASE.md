@@ -45,10 +45,11 @@ Documentation has been split and made component-specific:
 
 ### NFC/PACE Implementation
 
-- Confirmed pure Go implementation using `libopenpace-go`
+- Confirmed pure Go implementation using `libopenpace-go` v1.0.0
 - Removed obsolete C-based build scripts (`build-nfc.ps1`, `build-nfc.sh`)
 - NFC support is now built-in by default (no special build steps required)
 - Updated documentation to reflect pure Go architecture
+- `libopenpace-go` is now a versioned dependency (v1.0.0)
 
 ## Breaking Changes
 
@@ -135,9 +136,10 @@ Users must:
 
 **Code Files:**
 - `eid-pd-reader/main.go` - Module path and app name
-- `eid-pd-reader/go.mod` - Module name and replace directive
+- `eid-pd-reader/go.mod` - Module name, versioned libopenpace-go dependency (v1.0.0)
 - `eid-pd-reader/native/**/*.go` - Import paths
 - `eid-pd-extension/extension/background*.js` - Host name
+- `libopenpace-go/README.md` - Version 1.0.0 documentation
 
 **Configuration Files:**
 - `eid-pd-reader/config.yaml` - Log paths
@@ -167,6 +169,8 @@ Users must:
 - `ops/install-all.cmd` - Master installation script
 - `ops/uninstall-all.cmd` - Master uninstallation script
 - `.gitignore` files for each component
+- `libopenpace-go/VERSION` - Version file (1.0.0)
+- `libopenpace-go/CHANGELOG.md` - Version history and release notes
 
 ### Removed Files
 

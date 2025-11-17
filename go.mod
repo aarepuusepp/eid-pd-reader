@@ -8,8 +8,9 @@ require (
 )
 
 require (
-	github.com/aarepuusepp/libopenpace-go v0.0.0-00010101000000-000000000000
+	github.com/aarepuusepp/libopenpace-go v1.0.0
 	go.gnd.pw/crypto v0.0.0-20231118094619-86ae7742a3a2 // indirect
 )
 
-replace github.com/aarepuusepp/libopenpace-go => ../libopenpace-go
+// Local development: use local libopenpace-go instead of remote version
+replace github.com/aarepuusepp/libopenpace-go v1.0.0 => ../libopenpace-go
