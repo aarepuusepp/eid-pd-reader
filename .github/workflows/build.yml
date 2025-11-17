@@ -1,0 +1,113 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.4'
+      
+      - name: Build
+        run: |
+          cd eid-pd-reader
+          go mod tidy
+          go build -o eid-pd-reader.exe .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: eid-pd-reader-windows
+          path: eid-pd-reader/eid-pd-reader.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.4'
+      
+      - name: Install PC/SC dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpcsclite-dev pcscd
+      
+      - name: Build
+        run: |
+          cd eid-pd-reader
+          go mod tidy
+          go build -o eid-pd-reader .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: eid-pd-reader-linux
+          path: eid-pd-reader/eid-pd-reader
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.4'
+      
+      - name: Build
+        run: |
+          cd eid-pd-reader
+          go mod tidy
+          go build -o eid-pd-reader .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: eid-pd-reader-macos
+          path: eid-pd-reader/eid-pd-reader
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.4'
+      
+      - name: Run tests
+        run: |
+          cd eid-pd-reader
+          go mod tidy
+          go test ./native/internal/apdu/...
+          go test ./native/internal/esteid/...
+
+  package-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Package extension
+        run: |
+          cd eid-pd-extension/extension
+          zip -r ../../eid-pd-extension.zip . -x "*.DS_Store"
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: eid-pd-extension-package
+          path: eid-pd-extension.zip
+

@@ -9,11 +9,11 @@ The eid-pd-reader is a Go-based native application that communicates with PC/SC 
 ## Features
 
 - **Contact Reading:** Direct reading via contact card readers
-- **NFC Reading:** Contactless reading with PACE protocol
+- **NFC Reading:** Built-in contactless reading with pure Go PACE protocol implementation
 - **Multiple Card Types:** Support for IDEMIA, Thales, and other Estonian ID cards
 - **Configurable:** YAML-based configuration
 - **Cross-Platform:** Windows, Linux, macOS
-- **No CGO:** Pure Go with no C dependencies (except PC/SC)
+- **Pure Go:** No C dependencies except PC/SC (uses libopenpace-go for PACE protocol)
 
 ## Installation
 
@@ -94,28 +94,39 @@ Request:
 Response:
 ```json
 {
-  "ok": true,
-  "data": {
-    "surname": "JÕEORG",
-    "givenName": "JAAK-KRISTJAN",
-    "personalCode": "38001085718",
-    "documentNumber": "AT0000222"
-  }
+    "ok": true,
+    "data": {
+        "surname": "JÕEORG",
+        "givenName": "JAAK-KRISTJAN",
+        "sex": "M",
+        "citizenship": "EST",
+        "birthDate": "01 08 1980",
+        "personalCode": "38001085718",
+        "documentNr": "AT0000222",
+        "expiryDate": "09 12 2029",
+        "issueDate": "09 12 2024",
+        "source": "chip:Thales"
+    }
 }
 ```
 
 ## Building
 
-```bash
-# Build
-go build -o eid-pd-reader.exe
+NFC support is built-in using the pure Go `libopenpace-go` library. No special build steps required.
 
-# Build with NFC support
-./ops/build-nfc.ps1
+```bash
+# Standard build (includes NFC support)
+go mod tidy
+go build -o eid-pd-reader.exe .
+
+# Or use the build script
+.\build.ps1
 
 # Run tests
 go test ./...
 ```
+
+The reader automatically detects if a card requires PACE (NFC) and uses the appropriate protocol.
 
 ## Extension ID Configuration
 
@@ -153,7 +164,7 @@ See [Supported Cards](./docs/reference/SUPPORTED-CARDS.md) for details.
 
 ### Linux
 - PC/SC Lite: `sudo apt-get install pcscd libpcsclite-dev`
-- Go 1.21+
+- Go 1.25+ (for building from source)
 
 ### macOS
 - macOS 10.15+ (Catalina or later)
@@ -189,7 +200,25 @@ MIT License
 
 ## Version
 
-Current version: 1.0.2
+Current version: 1.0.3
 
 See [Release Notes](./docs/releases/) for changelog.
+
+## Technical Details
+
+### NFC/PACE Support
+
+The reader uses the pure Go `libopenpace-go` library for PACE (Password Authenticated Connection Establishment) protocol support. This means:
+
+- **No C dependencies** for PACE protocol (previously required OpenPACE C library)
+- **Easier builds** across all platforms
+- **Better integration** with Go toolchain
+- **Automatic protocol detection** - the reader detects if PACE is needed and applies it transparently
+
+The PACE implementation supports:
+- Brainpool curves (BP256R1, BP320R1, BP384R1, BP512R1)
+- AES encryption (AES-128, AES-192, AES-256)
+- Automatic CAN (Card Access Number) handling
+
+See [libopenpace-go](../libopenpace-go/) for more details on the PACE implementation.
 
