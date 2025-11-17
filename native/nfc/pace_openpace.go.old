@@ -1,0 +1,171 @@
+//go:build openpace
+// +build openpace
+
+package nfc
+
+/*
+#cgo CFLAGS: -I/usr/local/include -I/opt/openpace/include -I/usr/include
+#cgo LDFLAGS: -lopenpace -leac -lcrypto
+
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+
+// OpenPACE API declarations
+// Note: Adjust these based on your installed OpenPACE version
+typedef void* EAC_CTX;
+
+// Initialize EAC context
+EAC_CTX EAC_CTX_new(void);
+
+// Free EAC context
+void EAC_CTX_clear_free(EAC_CTX ctx);
+
+// Perform PACE protocol
+// Returns 0 on success, non-zero on failure
+int perform_pace(EAC_CTX ctx, const char* pin, size_t pin_len, 
+                 int (*transmit)(const uint8_t*, size_t, uint8_t**, size_t*, void*),
+                 void* card_handle);
+
+// Wrap APDU with secure messaging
+// Returns 0 on success, allocates wrapped_apdu (caller must free)
+int sm_wrap_apdu(EAC_CTX ctx, const uint8_t* apdu, size_t apdu_len,
+                 uint8_t** wrapped_apdu, size_t* wrapped_len);
+
+// Unwrap response from secure messaging
+// Returns 0 on success, allocates unwrapped_resp (caller must free)
+int sm_unwrap_response(EAC_CTX ctx, const uint8_t* resp, size_t resp_len,
+                       uint8_t** unwrapped_resp, size_t* unwrapped_len,
+                       uint16_t* sw);
+*/
+import "C"
+import (
+	"errors"
+	"fmt"
+	"unsafe"
+
+	"github.com/ebfe/scard"
+)
+
+// smOpenPACE implements SM interface using OpenPACE library.
+type smOpenPACE struct {
+	ctx  C.EAC_CTX
+	card *scard.Card
+}
+
+// Transmit wraps the APDU with SM, sends it, and unwraps the response.
+func (s *smOpenPACE) Transmit(apdu []byte) ([]byte, uint16, error) {
+	if len(apdu) == 0 {
+		return nil, 0, errors.New("empty APDU")
+	}
+
+	// Wrap APDU with SM
+	var wrappedAPDU *C.uint8_t
+	var wrappedLen C.size_t
+
+	ret := C.sm_wrap_apdu(
+		s.ctx,
+		(*C.uint8_t)(unsafe.Pointer(&apdu[0])),
+		C.size_t(len(apdu)),
+		&wrappedAPDU,
+		&wrappedLen,
+	)
+
+	if ret != 0 {
+		return nil, 0, fmt.Errorf("failed to wrap APDU with SM: error %d", ret)
+	}
+	defer C.free(unsafe.Pointer(wrappedAPDU))
+
+	// Send wrapped APDU to card
+	wrappedBytes := C.GoBytes(unsafe.Pointer(wrappedAPDU), C.int(wrappedLen))
+	resp, err := s.card.Transmit(wrappedBytes)
+	if err != nil {
+		return nil, 0, fmt.Errorf("card transmit failed: %w", err)
+	}
+
+	if len(resp) < 2 {
+		return nil, 0, errors.New("response too short")
+	}
+
+	// Unwrap response
+	var unwrappedResp *C.uint8_t
+	var unwrappedLen C.size_t
+	var sw C.uint16_t
+
+	ret = C.sm_unwrap_response(
+		s.ctx,
+		(*C.uint8_t)(unsafe.Pointer(&resp[0])),
+		C.size_t(len(resp)),
+		&unwrappedResp,
+		&unwrappedLen,
+		&sw,
+	)
+
+	if ret != 0 {
+		return nil, 0, fmt.Errorf("failed to unwrap SM response: error %d", ret)
+	}
+
+	if unwrappedLen > 0 {
+		defer C.free(unsafe.Pointer(unwrappedResp))
+		data := C.GoBytes(unsafe.Pointer(unwrappedResp), C.int(unwrappedLen))
+		return data, uint16(sw), nil
+	}
+
+	return nil, uint16(sw), nil
+}
+
+// Close releases OpenPACE context.
+func (s *smOpenPACE) Close() {
+	if s.ctx != nil {
+		C.EAC_CTX_clear_free(s.ctx)
+		s.ctx = nil
+	}
+}
+
+// StartPACE establishes PACE with the card using the provided CAN.
+func StartPACE(card *scard.Card, can string) (SM, error) {
+	if len(can) != 6 {
+		return nil, fmt.Errorf("CAN must be exactly 6 digits, got %d", len(can))
+	}
+
+	// Validate CAN is numeric
+	for _, c := range can {
+		if c < '0' || c > '9' {
+			return nil, fmt.Errorf("CAN must contain only digits")
+		}
+	}
+
+	// Initialize OpenPACE context
+	ctx := C.EAC_CTX_new()
+	if ctx == nil {
+		return nil, errors.New("failed to create EAC context")
+	}
+
+	// Convert CAN to C string
+	cCAN := C.CString(can)
+	defer C.free(unsafe.Pointer(cCAN))
+
+	// Note: The actual PACE implementation would use perform_pace with a callback
+	// to transmit APDUs. This is a simplified version.
+	// In a real implementation, you'd need to:
+	// 1. Read EF.CardAccess
+	// 2. Parse PACE parameters
+	// 3. Run PACE protocol with multiple APDU exchanges
+	// 4. Establish secure messaging keys
+
+	// For now, return a structure that will work with the stub
+	// A full implementation requires more complex OpenPACE integration
+	sm := &smOpenPACE{
+		ctx:  ctx,
+		card: card,
+	}
+
+	// TODO: Actual PACE protocol execution
+	// This would involve calling OpenPACE functions to:
+	// - Read CardAccess
+	// - Execute PACE steps
+	// - Establish SM session
+
+	return sm, nil
+}
+

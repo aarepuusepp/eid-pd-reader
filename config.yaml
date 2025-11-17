@@ -1,0 +1,82 @@
+# Estonian ID Card Personal Data Reader - Configuration
+# Configuration file for eid-pd-reader native application
+#
+# This file should be placed in one of the following locations:
+# - Same directory as eid-pd-reader.exe
+# - C:\ProgramData\eid-pd-reader\config.yaml (Windows)
+# - /etc/eid-pd-reader/config.yaml (Linux)
+# - /Library/Application Support/eid-pd-reader/config.yaml (macOS)
+#
+# You can also specify a custom location using: eid-pd-reader.exe --config path/to/config.yaml
+
+# Logging configuration
+logging:
+  # Enable or disable logging (true/false)
+  enabled: true
+  
+  # Log level: debug, info, warn, error
+  level: info
+  
+  # Log file location (empty string means no file logging, only stderr)
+  # Windows example: C:\ProgramData\eid-pd-reader\eid-pd-reader.log
+  # Linux example: /var/log/eid-pd-reader/eid-pd-reader.log
+  # macOS example: /usr/local/var/log/eid-pd-reader/eid-pd-reader.log
+  file: ""
+  
+  # Maximum log file size in MB (0 = unlimited)
+  max_size_mb: 10
+  
+  # Maximum number of old log files to keep (0 = keep all)
+  max_backups: 5
+  
+  # Maximum age of log files in days (0 = no age limit)
+  max_age_days: 30
+  
+  # Compress old log files (true/false)
+  compress: true
+
+# Card reader configuration
+card:
+  # Timeout for card operations in seconds
+  timeout_seconds: 30
+  
+  # Retry attempts for failed operations
+  retry_attempts: 3
+  
+  # Delay between retries in milliseconds
+  retry_delay_ms: 500
+
+# Cache configuration
+cache:
+  # Enable caching of personal data (true/false)
+  enabled: true
+  
+  # Cache duration in seconds (0 = no expiration)
+  duration_seconds: 300  # 5 minutes
+
+# Security configuration
+security:
+  # Allowed extension IDs (comma-separated)
+  # Chrome/Edge format: chrome-extension://EXTENSION_ID/
+  # Firefox format: EXTENSION_ID@mozilla.org
+  allowed_extensions:
+    - "chrome-extension://YOUR_EXTENSION_ID/"
+  
+  # Enable strict origin validation (true/false)
+  strict_validation: true
+
+# Advanced configuration
+advanced:
+  # Enable verbose APDU logging (true/false)
+  # WARNING: This may log sensitive data
+  verbose_apdu: false
+  
+  # Custom FID mappings (for non-standard cards)
+  # Format: field_name: "FID_HEX"
+  custom_fids: {}
+    # Example:
+    # df_personal: "5000"
+    # ef_surname: "5001"
+    # ef_given: "5002"
+    # ef_code: "5006"
+

@@ -1,0 +1,107 @@
+package nfc
+
+import (
+	"fmt"
+)
+
+const (
+	// MaxSMLe is the maximum Le (expected length) for SM-wrapped APDUs.
+	// AES SM: ~231 bytes, 3DES SM: ~239 bytes. Use conservative value.
+	MaxSMLe = 231
+)
+
+// SMReadBinary reads binary data from the currently selected EF via Secure Messaging.
+// Handles 6Cxx (wrong length) responses and chunking for large files.
+func SMReadBinary(sm SM, offset int, maxLength int) ([]byte, error) {
+	if maxLength <= 0 {
+		maxLength = 65536 // reasonable max
+	}
+
+	var result []byte
+	currentOffset := offset
+
+	for len(result) < maxLength {
+		// Determine how much to read in this chunk
+		remaining := maxLength - len(result)
+		chunkSize := MaxSMLe
+		if remaining < chunkSize {
+			chunkSize = remaining
+		}
+
+		// Try reading with Le=0 first to get length hint
+		apdu := APDUReadBinary(currentOffset, 0)
+		data, sw, err := sm.Transmit(apdu)
+		if err != nil {
+			return nil, fmt.Errorf("SM transmit failed at offset %d: %w", currentOffset, err)
+		}
+
+		// Handle 6Cxx - wrong length, retry with correct Le
+		if IsWrongLength(sw) {
+			correctLen := GetCorrectLength(sw)
+			if correctLen > 0 && correctLen <= MaxSMLe {
+				apdu = APDUReadBinary(currentOffset, correctLen)
+				data, sw, err = sm.Transmit(apdu)
+				if err != nil {
+					return nil, fmt.Errorf("SM transmit retry failed at offset %d: %w", currentOffset, err)
+				}
+			}
+		}
+
+		// Check for success
+		if !IsSuccess(sw) {
+			// If we got some data already and hit EOF, return what we have
+			if len(result) > 0 && (sw == 0x6B00 || sw == 0x6A82) {
+				break
+			}
+			return nil, fmt.Errorf("READ BINARY failed at offset %d: SW=%04X", currentOffset, sw)
+		}
+
+		// Append data
+		if len(data) == 0 {
+			break // No more data
+		}
+
+		result = append(result, data...)
+		currentOffset += len(data)
+
+		// If we got less than requested, we're done
+		if len(data) < chunkSize {
+			break
+		}
+	}
+
+	return result, nil
+}
+
+// SMReadEF reads an entire EF via Secure Messaging.
+// First tries Le=0 to get length hint, then reads with proper chunking.
+func SMReadEF(sm SM, maxSize int) ([]byte, error) {
+	if maxSize <= 0 {
+		maxSize = 512 // default for personal data fields
+	}
+
+	return SMReadBinary(sm, 0, maxSize)
+}
+
+// SMSelectAndRead selects an EF and reads its content via Secure Messaging.
+func SMSelectAndRead(sm SM, fid [2]byte, maxSize int) ([]byte, error) {
+	// Select EF
+	selectAPDU := APDUSelectEF(fid)
+	_, sw, err := sm.Transmit(selectAPDU)
+	if err != nil {
+		return nil, fmt.Errorf("SELECT EF %02X%02X failed: %w", fid[0], fid[1], err)
+	}
+
+	if !IsSuccess(sw) {
+		return nil, fmt.Errorf("SELECT EF %02X%02X returned SW=%04X", fid[0], fid[1], sw)
+	}
+
+	// Read EF content
+	data, err := SMReadEF(sm, maxSize)
+	if err != nil {
+		return nil, fmt.Errorf("READ EF %02X%02X failed: %w", fid[0], fid[1], err)
+	}
+
+	return data, nil
+}
+

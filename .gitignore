@@ -1,0 +1,33 @@
+# Build outputs
+*.exe
+eid-pd-reader
+eid-pd-reader.exe
+
+# Go build artifacts
+*.o
+*.a
+*.so
+*.test
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Config overrides
+config.local.yaml
+
+docs/specs/

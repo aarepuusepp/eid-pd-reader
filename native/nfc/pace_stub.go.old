@@ -1,0 +1,23 @@
+//go:build !openpace
+// +build !openpace
+
+package nfc
+
+import (
+	"fmt"
+
+	"github.com/ebfe/scard"
+)
+
+// smStub is a stub implementation when OpenPACE is not available.
+type smStub struct{}
+
+func (s *smStub) Transmit(_ []byte) ([]byte, uint16, error) {
+	return nil, 0, fmt.Errorf("secure messaging not available: rebuild with -tags openpace and link OpenPACE library")
+}
+
+// StartPACE is the stub implementation that returns an error when OpenPACE is not built in.
+func StartPACE(_ *scard.Card, _ string) (SM, error) {
+	return nil, fmt.Errorf("PACE not available: rebuild eid-pd-reader with -tags openpace and install OpenPACE library")
+}
+
