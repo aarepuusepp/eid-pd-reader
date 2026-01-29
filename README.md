@@ -19,7 +19,24 @@ The eid-pd-reader is a Go-based native application that communicates with PC/SC 
 
 ### Windows
 
+**Quick Install (from source):**
+
 ```cmd
+REM Build release package
+build-release.cmd
+
+REM Install (run as Administrator)
+cd build
+install-reader.cmd
+```
+
+**Manual Install:**
+
+```cmd
+REM Build executable
+go build -o eid-pd-reader.exe ./cmd/eid-pd-reader
+
+REM Install (run as Administrator)
 install-reader.cmd
 ```
 
@@ -31,12 +48,14 @@ This will:
 ### Linux
 
 ```bash
+go build -o eid-pd-reader ./cmd/eid-pd-reader
 ./ops/install-host.sh
 ```
 
 ### macOS
 
 ```bash
+go build -o eid-pd-reader ./cmd/eid-pd-reader
 ./ops/install-host.sh
 ```
 
@@ -66,18 +85,29 @@ See [Configuration Guide](./docs/guides/CONFIG-GUIDE.md) for details.
 ### Command Line
 
 ```bash
+# Show help
+eid-pd-reader.exe
+
 # Read card data
 eid-pd-reader.exe --dump
 
 # With NFC
 eid-pd-reader.exe --dump --nfc --can 123456
 
+# Read from all available readers
+eid-pd-reader.exe --dump --all-readers
+
 # Verbose mode
 eid-pd-reader.exe --dump --verbose
+
+# Debug mode (show card structure)
+eid-pd-reader.exe --debug
 
 # Show version
 eid-pd-reader.exe --version
 ```
+
+Running without parameters displays usage help with all available options.
 
 ### Native Messaging
 
@@ -117,16 +147,53 @@ NFC support is built-in using the pure Go `libopenpace-go` library. No special b
 ```bash
 # Standard build (includes NFC support)
 go mod tidy
-go build -o eid-pd-reader.exe .
+go build -o eid-pd-reader.exe ./cmd/eid-pd-reader   # Windows
+go build -o eid-pd-reader ./cmd/eid-pd-reader       # Linux/macOS
 
-# Or use the build script
+# Or use the build script (Windows)
 .\build.ps1
 
 # Run tests
 go test ./...
 ```
 
+### Release Build (Windows)
+
+To create a complete release package with all installable files:
+
+```cmd
+build-release.cmd
+```
+
+This creates a `build` folder containing:
+- `eid-pd-reader.exe` - Native helper executable
+- `ee.aarepuusepp.eid_pd_reader.json` - Chrome/Edge manifest
+- `ee.aarepuusepp.eid_pd_reader.firefox.json` - Firefox manifest
+- `install-reader.cmd` - Installation script
+- `uninstall-reader.cmd` - Uninstallation script
+
 The reader automatically detects if a card requires PACE (NFC) and uses the appropriate protocol.
+
+## Project Structure
+
+```
+eid-pd-reader/
+├── cmd/
+│   └── eid-pd-reader/      # Main application entry point
+│       └── main.go
+├── native/
+│   ├── apdu/               # APDU command handling
+│   ├── config/             # Configuration management
+│   ├── esteid/             # Estonian ID card reading logic
+│   ├── logger/             # Logging utilities
+│   └── nfc/                # NFC/PACE protocol support
+├── host-manifests/         # Browser native messaging manifests
+├── ops/                    # Operational scripts
+├── docs/                   # Documentation
+├── build-release.cmd       # Release build script
+├── install-reader.cmd      # Installation script
+└── uninstall-reader.cmd    # Uninstallation script
+```
 
 ## Extension ID Configuration
 

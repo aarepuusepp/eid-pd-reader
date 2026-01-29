@@ -115,7 +115,7 @@ Users must:
    # Or build individually
    cd eid-pd-reader
    go mod tidy
-   go build -o eid-pd-reader.exe .
+   go build -o eid-pd-reader.exe ./cmd/eid-pd-reader
    ```
 
 3. **Update import paths** (if you have custom code):

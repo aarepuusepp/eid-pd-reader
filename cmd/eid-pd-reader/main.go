@@ -169,6 +169,13 @@ func main() {
 		return
 	}
 
+	// Check if running interactively without any action flags
+	// If stdin is a terminal and no flags were provided, show help
+	if isStdinTerminal() {
+		printUsage()
+		return
+	}
+
 	// Native Messaging host mode
 	logger.Info("Native messaging host started", map[string]interface{}{
 		"pid": os.Getpid(),
@@ -280,6 +287,40 @@ func isNFCSupported() bool {
 	}
 	// Any other error (like CAN validation) means NFC is supported
 	return true
+}
+
+// isStdinTerminal checks if stdin is a terminal (interactive mode).
+func isStdinTerminal() bool {
+	fileInfo, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	// Check if stdin is a character device (terminal) rather than a pipe or file
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+}
+
+// printUsage prints help information for CLI usage.
+func printUsage() {
+	fmt.Printf("%s version %s - Estonian ID Card Personal Data Reader\n\n", AppName, Version)
+	fmt.Println("Usage:")
+	fmt.Println("  eid-pd-reader --dump              Read personal data from ID card (contact mode)")
+	fmt.Println("  eid-pd-reader --dump --nfc --can=XXXXXX  Read via NFC with CAN")
+	fmt.Println("  eid-pd-reader --dump --all-readers       Read from all available readers")
+	fmt.Println("  eid-pd-reader --debug             Debug mode: show card structure")
+	fmt.Println("  eid-pd-reader --version           Show version information")
+	fmt.Println("")
+	fmt.Println("Options:")
+	flag.PrintDefaults()
+	fmt.Println("")
+	fmt.Println("Native Messaging Mode:")
+	fmt.Println("  When run without flags and stdin is not a terminal, the application")
+	fmt.Println("  operates as a Chrome/Firefox Native Messaging host.")
+	fmt.Println("")
+	fmt.Println("Examples:")
+	fmt.Println("  eid-pd-reader --dump")
+	fmt.Println("  eid-pd-reader --dump --verbose")
+	fmt.Println("  eid-pd-reader --dump --nfc --can=123456")
+	fmt.Println("  eid-pd-reader --dump --nfc --can-env=EID_CAN --retry=3")
 }
 
 // --- Native messaging framing (4-byte little endian length) ---

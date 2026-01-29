@@ -21,7 +21,7 @@ jobs:
         run: |
           cd eid-pd-reader
           go mod tidy
-          go build -o eid-pd-reader.exe .
+          go build -o eid-pd-reader.exe ./cmd/eid-pd-reader
       
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -48,7 +48,7 @@ jobs:
         run: |
           cd eid-pd-reader
           go mod tidy
-          go build -o eid-pd-reader .
+          go build -o eid-pd-reader ./cmd/eid-pd-reader
       
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -70,7 +70,7 @@ jobs:
         run: |
           cd eid-pd-reader
           go mod tidy
-          go build -o eid-pd-reader .
+          go build -o eid-pd-reader ./cmd/eid-pd-reader
       
       - name: Upload artifact
         uses: actions/upload-artifact@v3

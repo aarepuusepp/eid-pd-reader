@@ -346,10 +346,8 @@ func writeNativeMessage(v interface{}) error {
 ```bash
 cd native
 go mod tidy
-# Linux/macOS
-go build -o eid-pd-reader ./cmd/eid-pd-reader
-# Windows
-go build -o eid-pd-reader.exe ./cmd/eid-pd-reader
+# All platforms (output name derived from directory)
+go build ./cmd/eid-pd-reader
 ```
 
 > Requires a PC/SC stack: **Windows Smart Card Service**, **pcscd** (Linux), or **PCSC** (macOS). Ensure your ID-card driver/middleware is installed and a **contact** reader is used.

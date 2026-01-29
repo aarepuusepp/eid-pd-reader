@@ -24,7 +24,8 @@ $HELPER_EXE = Join-Path $REPO_ROOT "eid-pd-reader.exe"
 
 if (-not (Test-Path $HELPER_EXE)) {
     Write-Warning "eid-pd-reader.exe not found at $HELPER_EXE"
-    Write-Host "Please build first using ops\build-all.ps1"
+    Write-Host "Please build first using: go build -o eid-pd-reader.exe ./cmd/eid-pd-reader"
+    Write-Host "Or use the build script: .\build.ps1"
     Write-Host "Then update the 'path' field in manifests to point to the absolute path of eid-pd-reader.exe"
 }
 

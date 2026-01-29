@@ -18,7 +18,7 @@ HELPER_BIN="$REPO_ROOT/eid-pd-reader"
 
 if [ ! -f "$HELPER_BIN" ]; then
     echo "Warning: eid-pd-reader not found at $HELPER_BIN"
-    echo "Please build first using ops/build-all.sh"
+    echo "Please build first using: go build -o eid-pd-reader ./cmd/eid-pd-reader"
     echo "Then update the 'path' field in $HOST_MANIFEST to point to the absolute path of eid-pd-reader"
 fi
 

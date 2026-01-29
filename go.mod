@@ -1,6 +1,6 @@
 module ee.aarepuusepp.eid-pd-reader
 
-go 1.25.4
+go 1.25.6
 
 require (
 	github.com/ebfe/scard v0.0.0-20241214075232-7af069cabc25

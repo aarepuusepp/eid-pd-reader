@@ -37,17 +37,33 @@ echo.
 echo     Script directory: %SCRIPT_DIR%
 echo.
 
-REM Check if eid-pd-reader.exe exists
-if not exist "%SCRIPT_DIR%\eid-pd-reader.exe" (
-    echo ERROR: eid-pd-reader.exe not found in script directory
+REM Check if eid-pd-reader.exe exists (check both project root and cmd subdirectory)
+set EXE_PATH=
+if exist "%SCRIPT_DIR%\eid-pd-reader.exe" (
+    set EXE_PATH=%SCRIPT_DIR%\eid-pd-reader.exe
+) else if exist "%SCRIPT_DIR%\cmd\eid-pd-reader\eid-pd-reader.exe" (
+    set EXE_PATH=%SCRIPT_DIR%\cmd\eid-pd-reader\eid-pd-reader.exe
+)
+
+if "%EXE_PATH%"=="" (
+    echo ERROR: eid-pd-reader.exe not found
     echo.
-    echo Expected location: %SCRIPT_DIR%\eid-pd-reader.exe
+    echo Searched locations:
+    echo     %SCRIPT_DIR%\eid-pd-reader.exe
+    echo     %SCRIPT_DIR%\cmd\eid-pd-reader\eid-pd-reader.exe
+    echo.
+    echo To build all installable files, run:
+    echo     build-release.cmd
+    echo.
+    echo Then install from the build folder:
+    echo     cd build
+    echo     install-reader.cmd
     echo.
     pause
     exit /b 1
 )
 
-echo     [OK] eid-pd-reader.exe found
+echo     [OK] Found: %EXE_PATH%
 echo.
 
 REM ============================================================================
@@ -76,33 +92,59 @@ echo [3/6] Copying files...
 echo.
 
 REM Copy native helper executable
-copy /Y "%SCRIPT_DIR%\eid-pd-reader.exe" "%INSTALL_DIR%\eid-pd-reader.exe" >nul
+copy /Y "%EXE_PATH%" "%INSTALL_DIR%\eid-pd-reader.exe" >nul
 if %errorLevel% neq 0 (
     echo ERROR: Failed to copy eid-pd-reader.exe
-    echo Source: %SCRIPT_DIR%\eid-pd-reader.exe
+    echo Source: %EXE_PATH%
     echo Dest:   %INSTALL_DIR%\eid-pd-reader.exe
     pause
     exit /b 1
 )
 echo     [OK] Copied: eid-pd-reader.exe
 
-REM Copy Chrome/Edge host manifest
-copy /Y "%SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.json" "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json" >nul
+REM Find and copy Chrome/Edge host manifest (check build folder first, then host-manifests)
+set CHROME_MANIFEST=
+if exist "%SCRIPT_DIR%\ee.aarepuusepp.eid_pd_reader.json" (
+    set CHROME_MANIFEST=%SCRIPT_DIR%\ee.aarepuusepp.eid_pd_reader.json
+) else if exist "%SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.json" (
+    set CHROME_MANIFEST=%SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.json
+)
+
+if "%CHROME_MANIFEST%"=="" (
+    echo ERROR: Chrome/Edge manifest not found
+    echo Searched: %SCRIPT_DIR%\ee.aarepuusepp.eid_pd_reader.json
+    echo Searched: %SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.json
+    pause
+    exit /b 1
+)
+
+copy /Y "%CHROME_MANIFEST%" "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json" >nul
 if %errorLevel% neq 0 (
     echo ERROR: Failed to copy Chrome/Edge manifest
-    echo Source: %SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.json
-    echo Dest:   %INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json
     pause
     exit /b 1
 )
 echo     [OK] Copied: ee.aarepuusepp.eid_pd_reader.json (Chrome/Edge)
 
-REM Copy Firefox host manifest
-copy /Y "%SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.firefox.json" "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json" >nul
+REM Find and copy Firefox host manifest (check build folder first, then host-manifests)
+set FIREFOX_MANIFEST=
+if exist "%SCRIPT_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json" (
+    set FIREFOX_MANIFEST=%SCRIPT_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json
+) else if exist "%SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.firefox.json" (
+    set FIREFOX_MANIFEST=%SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.firefox.json
+)
+
+if "%FIREFOX_MANIFEST%"=="" (
+    echo ERROR: Firefox manifest not found
+    echo Searched: %SCRIPT_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json
+    echo Searched: %SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.firefox.json
+    pause
+    exit /b 1
+)
+
+copy /Y "%FIREFOX_MANIFEST%" "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json" >nul
 if %errorLevel% neq 0 (
     echo ERROR: Failed to copy Firefox manifest
-    echo Source: %SCRIPT_DIR%\host-manifests\ee.aarepuusepp.eid_pd_reader.firefox.json
-    echo Dest:   %INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json
     pause
     exit /b 1
 )

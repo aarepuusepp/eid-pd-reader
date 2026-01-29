@@ -15,7 +15,7 @@ Write-Host "`nCleaning old build..." -ForegroundColor Yellow
 Remove-Item eid-pd-reader.exe -ErrorAction SilentlyContinue
 
 Write-Host "Building..." -ForegroundColor Yellow
-go build -o eid-pd-reader.exe
+go build -o eid-pd-reader.exe ./cmd/eid-pd-reader
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n✓ Build successful!" -ForegroundColor Green
