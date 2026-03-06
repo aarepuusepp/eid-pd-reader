@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"ee.aarepuusepp.eid-pd-reader/native/config"
 	"ee.aarepuusepp.eid-pd-reader/native/esteid"
@@ -14,7 +15,7 @@ import (
 
 // Version information
 const (
-	Version = "1.0.3"
+	Version = "2.0.0"
 	AppName = "eid-pd-reader"
 )
 
@@ -33,14 +34,27 @@ type request struct {
 	Command string            `json:"command"` // New field name for consistency
 	Cmd     string            `json:"cmd"`     // Legacy field name
 	FIDs    map[string]string `json:"fids"`
-	CAN     string            `json:"can"`  // Card Access Number for NFC/PACE
-	Mode    string            `json:"mode"` // "contact" or "nfc"
+	CAN     string            `json:"can"`   // Card Access Number for NFC/PACE
+	Mode    string            `json:"mode"`  // "contact" or "nfc"
+	Retry   int               `json:"retry"` // NFC retry count (0 = default 3)
 }
 
 type response struct {
-	OK    bool                 `json:"ok"`
-	Error string               `json:"error,omitempty"`
-	Data  *esteid.PersonalData `json:"data,omitempty"`
+	OK        bool                 `json:"ok"`
+	Timestamp string               `json:"timestamp"`
+	Duration  string               `json:"duration"`
+	Error     string               `json:"error,omitempty"`
+	Data      *esteid.PersonalData `json:"data,omitempty"`
+}
+
+func makeResponse(ok bool, startTime time.Time, data *esteid.PersonalData, errMsg string) response {
+	return response{
+		OK:        ok,
+		Timestamp: startTime.Format("2006-01-02 15:04:05.00000"),
+		Duration:  esteid.FormatDuration(time.Since(startTime)),
+		Error:     errMsg,
+		Data:      data,
+	}
 }
 
 func main() {
@@ -54,7 +68,7 @@ func main() {
 	nfcFlag := flag.Bool("nfc", false, "Use NFC mode with PACE (requires --can)")
 	canFlag := flag.String("can", "", "Card Access Number (6 digits) for NFC/PACE")
 	canEnv := flag.String("can-env", "", "Environment variable name containing CAN")
-	retryFlag := flag.Int("retry", 0, "Total number of attempts for NFC reading (default: 1)")
+	retryFlag := flag.Int("retry", 0, "Total number of attempts for NFC reading (default: 3)")
 	allReadersFlag := flag.Bool("all-readers", false, "Read from all available readers and return multiple results")
 	flag.Parse()
 
@@ -104,6 +118,8 @@ func main() {
 
 	if *dumpFlag {
 		// CLI mode: dump PD and exit
+		startTime := time.Now()
+
 		if cfg.Advanced.VerboseAPDU {
 			esteid.SetVerbose(true)
 		}
@@ -113,17 +129,23 @@ func main() {
 			results, err := esteid.ReadPersonalDataFromAllReaders(cfg.Advanced.CustomFIDs)
 			if err != nil {
 				logger.LogCardReadError(err.Error())
-				resp := response{OK: false, Error: err.Error()}
+				resp := makeResponse(false, startTime, nil, err.Error())
 				json.NewEncoder(os.Stdout).Encode(resp)
 				os.Exit(1)
 			}
 
-			// Return all results
 			type multiResponse struct {
-				OK      bool                `json:"ok"`
-				Results []esteid.CardResult `json:"results"`
+				OK        bool                `json:"ok"`
+				Timestamp string              `json:"timestamp"`
+				Duration  string              `json:"duration"`
+				Results   []esteid.CardResult `json:"results"`
 			}
-			resp := multiResponse{OK: true, Results: results}
+			resp := multiResponse{
+				OK:        true,
+				Timestamp: startTime.Format("2006-01-02 15:04:05.00000"),
+				Duration:  esteid.FormatDuration(time.Since(startTime)),
+				Results:   results,
+			}
 			json.NewEncoder(os.Stdout).Encode(resp)
 			return
 		}
@@ -138,7 +160,7 @@ func main() {
 				can = os.Getenv(*canEnv)
 			}
 			if can == "" {
-				resp := response{OK: false, Error: "NFC mode requires --can or --can-env"}
+				resp := makeResponse(false, startTime, nil, "NFC mode requires --can or --can-env")
 				json.NewEncoder(os.Stdout).Encode(resp)
 				os.Exit(1)
 			}
@@ -146,10 +168,8 @@ func main() {
 			// Set total attempts (--retry N means try N times total)
 			maxAttempts := *retryFlag
 			if maxAttempts == 0 {
-				maxAttempts = 1 // Default: try once
+				maxAttempts = 3 // Default: 3 attempts (NFC can be flaky)
 			}
-			// maxAttempts is already the total number of attempts
-			// --retry 1 = 1 attempt, --retry 2 = 2 attempts, etc.
 
 			pd, err = esteid.ReadPersonalDataNFCWithRetry(can, maxAttempts)
 		} else {
@@ -159,12 +179,12 @@ func main() {
 
 		if err != nil {
 			logger.LogCardReadError(err.Error())
-			resp := response{OK: false, Error: err.Error()}
+			resp := makeResponse(false, startTime, nil, err.Error())
 			json.NewEncoder(os.Stdout).Encode(resp)
 			os.Exit(1)
 		}
 		logger.LogCardRead(pd.PersonalCode, pd.Surname, pd.GivenName, pd.DocumentNr, pd.Source)
-		resp := response{OK: true, Data: pd}
+		resp := makeResponse(true, startTime, pd, "")
 		json.NewEncoder(os.Stdout).Encode(resp)
 		return
 	}
@@ -190,10 +210,12 @@ func main() {
 			})
 			return // EOF or fatal
 		}
+		startTime := time.Now()
+
 		var req request
 		if err := json.Unmarshal(msg, &req); err != nil {
 			logger.LogNativeMessage("request", "unknown", false, fmt.Sprintf("bad request: %v", err))
-			_ = writeNativeMessage(response{OK: false, Error: fmt.Sprintf("bad request: %v", err)})
+			_ = writeNativeMessage(makeResponse(false, startTime, nil, fmt.Sprintf("bad request: %v", err)))
 			continue
 		}
 		// Support both "command" and "cmd" field names
@@ -204,22 +226,22 @@ func main() {
 
 		switch command {
 		case "ping":
-			// Simple ping to check if helper is alive
 			logger.LogNativeMessage("request", "ping", true, "")
-			_ = writeNativeMessage(response{OK: true, Data: nil})
+			_ = writeNativeMessage(makeResponse(true, startTime, nil, ""))
 
 		case "version":
-			// Return version information
 			logger.LogNativeMessage("request", "version", true, "")
 			versionData := map[string]string{
 				"version": Version,
 				"name":    AppName,
 			}
 			_ = writeNativeMessage(map[string]interface{}{
-				"ok":      true,
-				"version": Version,
-				"name":    AppName,
-				"data":    versionData,
+				"ok":        true,
+				"timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				"duration":  esteid.FormatDuration(time.Since(startTime)),
+				"version":   Version,
+				"name":      AppName,
+				"data":      versionData,
 			})
 
 		case "readPersonalData", "getPersonalData":
@@ -228,48 +250,76 @@ func main() {
 			if err != nil {
 				logger.LogCardReadError(err.Error())
 				logger.LogNativeMessage("response", command, false, err.Error())
-				_ = writeNativeMessage(response{OK: false, Error: err.Error()})
+				_ = writeNativeMessage(makeResponse(false, startTime, nil, err.Error()))
 				continue
 			}
 			logger.LogCardRead(pd.PersonalCode, pd.Surname, pd.GivenName, pd.DocumentNr, pd.Source)
 			logger.LogNativeMessage("response", command, true, "")
-			_ = writeNativeMessage(response{OK: true, Data: pd})
+			_ = writeNativeMessage(makeResponse(true, startTime, pd, ""))
 
 		case "readPersonalDataNFC":
 			logger.LogNativeMessage("request", command, true, "CAN length: "+fmt.Sprint(len(req.CAN)))
 			if req.CAN == "" {
 				errMsg := "NFC mode requires CAN (Card Access Number)"
 				logger.LogNativeMessage("response", command, false, errMsg)
-				_ = writeNativeMessage(response{OK: false, Error: errMsg})
+				_ = writeNativeMessage(makeResponse(false, startTime, nil, errMsg))
 				continue
 			}
-			pd, err := esteid.ReadPersonalDataNFC(req.CAN)
+			maxAttempts := req.Retry
+			if maxAttempts <= 0 {
+				maxAttempts = 3
+			}
+			pd, err := esteid.ReadPersonalDataNFCWithRetry(req.CAN, maxAttempts)
 			if err != nil {
 				logger.LogCardReadError(err.Error())
 				logger.LogNativeMessage("response", command, false, err.Error())
-				_ = writeNativeMessage(response{OK: false, Error: err.Error()})
+				_ = writeNativeMessage(makeResponse(false, startTime, nil, err.Error()))
 				continue
 			}
 			logger.LogCardRead(pd.PersonalCode, pd.Surname, pd.GivenName, pd.DocumentNr, pd.Source)
 			logger.LogNativeMessage("response", command, true, "")
-			_ = writeNativeMessage(response{OK: true, Data: pd})
+			_ = writeNativeMessage(makeResponse(true, startTime, pd, ""))
+
+		case "readAllReaders":
+			logger.LogNativeMessage("request", command, true, "")
+			results, err := esteid.ReadPersonalDataFromAllReaders(req.FIDs)
+			if err != nil {
+				logger.LogCardReadError(err.Error())
+				logger.LogNativeMessage("response", command, false, err.Error())
+				_ = writeNativeMessage(makeResponse(false, startTime, nil, err.Error()))
+				continue
+			}
+			logger.LogNativeMessage("response", command, true, fmt.Sprintf("readers: %d", len(results)))
+			type multiResponse struct {
+				OK        bool                `json:"ok"`
+				Timestamp string              `json:"timestamp"`
+				Duration  string              `json:"duration"`
+				Results   []esteid.CardResult `json:"results"`
+			}
+			_ = writeNativeMessage(multiResponse{
+				OK:        true,
+				Timestamp: startTime.Format("2006-01-02 15:04:05.00000"),
+				Duration:  esteid.FormatDuration(time.Since(startTime)),
+				Results:   results,
+			})
 
 		case "capabilities":
-			// Return helper capabilities (e.g., NFC support)
 			logger.LogNativeMessage("request", "capabilities", true, "")
 			caps := map[string]interface{}{
 				"nfcSupported": isNFCSupported(),
 				"version":      Version,
 			}
 			_ = writeNativeMessage(map[string]interface{}{
-				"ok":   true,
-				"data": caps,
+				"ok":        true,
+				"timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				"duration":  esteid.FormatDuration(time.Since(startTime)),
+				"data":      caps,
 			})
 
 		default:
 			errMsg := fmt.Sprintf("unknown command: %s", command)
 			logger.LogNativeMessage("request", command, false, errMsg)
-			_ = writeNativeMessage(response{OK: false, Error: errMsg})
+			_ = writeNativeMessage(makeResponse(false, startTime, nil, errMsg))
 		}
 	}
 }

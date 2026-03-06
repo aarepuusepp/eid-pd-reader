@@ -3,8 +3,8 @@
 
 $ErrorActionPreference = "Stop"
 
-# Set Go 1.25.4 paths
-$env:GOROOT = "C:\usr\local\go\go-1.25.4-win64"
+# Set Go 1.26.0 paths
+$env:GOROOT = "C:\Program Files\Go"
 $env:PATH = "$env:GOROOT\bin;" + $env:PATH
 
 Write-Host "=== Building eid-pd-reader ===" -ForegroundColor Cyan

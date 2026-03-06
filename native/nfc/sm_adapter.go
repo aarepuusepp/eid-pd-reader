@@ -28,7 +28,7 @@ func (s *smPureGo) Transmit(apdu []byte) (data []byte, sw uint16, err error) {
 	}
 	
 	// Log plain APDU
-	fmt.Printf("[APDU] Plain: %X\n", apdu)
+	logVerbose("[APDU] Plain: %X\n", apdu)
 	
 	// Parse APDU components
 	cla := apdu[0]
@@ -70,7 +70,7 @@ func (s *smPureGo) Transmit(apdu []byte) (data []byte, sw uint16, err error) {
 		return nil, 0, fmt.Errorf("failed to wrap command: %w", err)
 	}
 	
-	fmt.Printf("[APDU] Wrapped: %X\n", wrappedCmd)
+	logVerbose("[APDU] Wrapped: %X\n", wrappedCmd)
 	
 	// Transmit wrapped command to card
 	response, err := s.card.Transmit(wrappedCmd)
@@ -78,16 +78,16 @@ func (s *smPureGo) Transmit(apdu []byte) (data []byte, sw uint16, err error) {
 		return nil, 0, fmt.Errorf("card transmit failed: %w", err)
 	}
 	
-	fmt.Printf("[APDU] Response: %X\n", response)
+	logVerbose("[APDU] Response: %X\n", response)
 	
 	// Unwrap response
 	plainData, sw, err := s.smCtx.UnwrapResponse(response)
 	if err != nil {
-		fmt.Printf("[APDU] Unwrap error: %v\n", err)
+		logVerbose("[APDU] Unwrap error: %v\n", err)
 		return nil, 0, fmt.Errorf("failed to unwrap response: %w", err)
 	}
 	
-	fmt.Printf("[APDU] Plain response: data=%X sw=%04X\n", plainData, sw)
+	logVerbose("[APDU] Plain response: data=%X sw=%04X\n", plainData, sw)
 	
 	return plainData, sw, nil
 }

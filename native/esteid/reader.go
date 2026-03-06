@@ -11,13 +11,19 @@ import (
 	"github.com/ebfe/scard"
 
 	"ee.aarepuusepp.eid-pd-reader/native/apdu"
+	"ee.aarepuusepp.eid-pd-reader/native/nfc"
+	"github.com/aarepuusepp/libopenpace-go/pace"
+	"github.com/aarepuusepp/libopenpace-go/sm"
 )
 
 var verboseMode bool
 
-// SetVerbose enables or disables verbose logging
+// SetVerbose enables or disables verbose logging for all layers (esteid, NFC, PACE, SM).
 func SetVerbose(enabled bool) {
 	verboseMode = enabled
+	nfc.SetVerbose(enabled)
+	pace.SetVerbose(enabled)
+	sm.SetVerbose(enabled)
 }
 
 func logVerbose(format string, args ...interface{}) {
@@ -174,6 +180,7 @@ func ensureCardReady(card *scard.Card) error {
 }
 
 // ReadPersonalData reads PD EFs via PC/SC from the first available EstEID card.
+// Tries all contact readers in order until one succeeds.
 // Overrides optionalFIDs can provide custom FIDs in hex like ["5000","5001",...].
 func ReadPersonalData(optionalFIDs map[string]string) (*PersonalData, error) {
 	ctx, err := scard.EstablishContext()
@@ -190,143 +197,56 @@ func ReadPersonalData(optionalFIDs map[string]string) (*PersonalData, error) {
 		return nil, fmt.Errorf("pcsc: no readers found")
 	}
 
-	var card *scard.Card
 	var lastErr error
-	var connectedReader string
+	noCardCount := 0
+	contactReaderCount := 0
 
-	// Try to connect to a reader with card
-	// Skip NFC readers (PICC/SAM) in contact mode - they need PACE
 	for _, r := range rdrs {
-		// Skip NFC readers in contact mode (they need --nfc flag with PACE)
 		if strings.Contains(r, "PICC") || strings.Contains(r, "SAM") {
 			logVerbose("Skipping NFC reader in contact mode: %s", r)
 			continue
 		}
+		contactReaderCount++
 
-		c, err := ctx.Connect(r, scard.ShareShared, scard.ProtocolAny)
-		if err == nil {
-			card = c
-			connectedReader = r
-			break
-		}
-		lastErr = err
-	}
-	if card == nil {
-		if lastErr != nil {
-			errMsg := lastErr.Error()
-			// Check for common "no card" error codes
+		card, err := ctx.Connect(r, scard.ShareShared, scard.ProtocolAny)
+		if err != nil {
+			errMsg := err.Error()
 			if strings.Contains(errMsg, "SCARD_E_NO_SMARTCARD") ||
 				strings.Contains(errMsg, "SCARD_W_REMOVED_CARD") ||
 				strings.Contains(errMsg, "SCARD_W_UNRESPONSIVE_CARD") ||
-				strings.Contains(errMsg, "error(8010000C)") || // SCARD_E_NO_SMARTCARD
-				strings.Contains(errMsg, "error(80100069)") { // SCARD_W_UNRESPONSIVE_CARD
-				return nil, fmt.Errorf("CARD_NOT_FOUND")
+				strings.Contains(errMsg, "error(8010000C)") ||
+				strings.Contains(errMsg, "error(80100069)") {
+				noCardCount++
+				logVerbose("No card in reader: %s", r)
+			} else {
+				logVerbose("Connect failed for reader %s: %v", r, err)
+				lastErr = err
 			}
-			return nil, fmt.Errorf("pcsc: could not connect to any reader (last error: %v)", lastErr)
+			continue
 		}
+
+		logVerbose("Connected to reader: %s", r)
+		pd, err := readPersonalDataFromCard(card, r, optionalFIDs)
+		card.Disconnect(scard.LeaveCard)
+
+		if err == nil {
+			return pd, nil
+		}
+
+		logVerbose("Reader %s failed: %v, trying next reader", r, err)
+		lastErr = err
+	}
+
+	if contactReaderCount == 0 {
+		return nil, fmt.Errorf("pcsc: no contact readers found")
+	}
+	if noCardCount == contactReaderCount {
 		return nil, fmt.Errorf("CARD_NOT_FOUND")
 	}
-	defer card.Disconnect(scard.LeaveCard)
-
-	logVerbose("Connected to reader: %s", connectedReader)
-
-	// Ensure card is ready before reading
-	// This prevents reading corrupted data when card was just inserted
-	// If readiness check fails, we'll proceed anyway - some cards don't respond to SELECT MF
-	if err := ensureCardReady(card); err != nil {
-		logVerbose("Card readiness check failed (will proceed anyway): %v", err)
+	if lastErr != nil {
+		return nil, fmt.Errorf("all readers failed. Last error: %w", lastErr)
 	}
-
-	// Detect card type from ATR
-	status, err := card.Status()
-	if err == nil {
-		cardType := detectCardType(status.Atr)
-		logVerbose("Card detected: %s (ATR: % X)", cardType, status.Atr)
-
-		// Use optimized strategy based on card type
-		switch cardType {
-		case CardTypeThales, CardTypeThalesTest:
-			logVerbose("Using Thales-optimized strategy")
-			pd, err := readPersonalDataThales(card, optionalFIDs)
-			if err == nil && validatePersonalData(pd) {
-				return pd, nil
-			}
-			if err == nil {
-				logVerbose("Thales strategy returned corrupted data, trying fallbacks")
-			} else {
-				logVerbose("Thales strategy failed: %v, trying fallbacks", err)
-			}
-		case CardTypeIdemiaCosom8, CardTypeIdemiaCosmoX:
-			logVerbose("Using IDEMIA-optimized strategy")
-			pd, err := readPersonalDataIdemia(card, optionalFIDs, cardType)
-			if err == nil && validatePersonalData(pd) {
-				return pd, nil
-			}
-			if err == nil {
-				logVerbose("IDEMIA strategy returned corrupted data, trying fallbacks")
-			} else {
-				logVerbose("IDEMIA strategy failed: %v, trying fallbacks", err)
-			}
-		default:
-			logVerbose("Unknown card type, trying all strategies")
-		}
-	}
-
-	// Try multiple strategies in order of likelihood
-	// Strategy 1: GET DATA approach (some cards support this)
-	logVerbose("\n=== Trying Strategy 1: GET DATA ===")
-	pd, err := readPersonalDataViaGetData(card)
-	if err == nil {
-		if validatePersonalData(pd) {
-			logVerbose("✓ Strategy 1 succeeded")
-			return pd, nil
-		}
-		logVerbose("✗ Strategy 1 returned corrupted data")
-	} else {
-		logVerbose("✗ Strategy 1 failed: %v", err)
-	}
-
-	// Strategy 2: Standard file-based approach with DF
-	logVerbose("\n=== Trying Strategy 2: Standard (MF->DF->EF) ===")
-	pd, err = readPersonalDataStandard(card, optionalFIDs)
-	if err == nil {
-		if validatePersonalData(pd) {
-			logVerbose("✓ Strategy 2 succeeded")
-			return pd, nil
-		}
-		logVerbose("✗ Strategy 2 returned corrupted data")
-	} else {
-		logVerbose("✗ Strategy 2 failed: %v", err)
-	}
-
-	// Strategy 3: Direct EF selection without DF (some Thales cards)
-	logVerbose("\n=== Trying Strategy 3: Direct EF (no DF) ===")
-	pd, err = readPersonalDataDirectEF(card, optionalFIDs)
-	if err == nil {
-		if validatePersonalData(pd) {
-			logVerbose("✓ Strategy 3 succeeded")
-			return pd, nil
-		}
-		logVerbose("✗ Strategy 3 returned corrupted data")
-	} else {
-		logVerbose("✗ Strategy 3 failed: %v", err)
-	}
-
-	// Strategy 4: Path-based selection (full path from MF)
-	logVerbose("\n=== Trying Strategy 4: Path-based ===")
-	pd, err = readPersonalDataByPath(card, optionalFIDs)
-	if err == nil {
-		if validatePersonalData(pd) {
-			logVerbose("✓ Strategy 4 succeeded")
-			return pd, nil
-		}
-		logVerbose("✗ Strategy 4 returned corrupted data")
-	} else {
-		logVerbose("✗ Strategy 4 failed: %v", err)
-	}
-
-	// All strategies failed
-	return nil, fmt.Errorf("all read strategies failed. Last error: %w", err)
+	return nil, fmt.Errorf("CARD_NOT_FOUND")
 }
 
 // readPersonalDataThales uses Thales-specific command sequence

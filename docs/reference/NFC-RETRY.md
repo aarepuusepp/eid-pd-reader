@@ -18,37 +18,36 @@ eid-pd-reader.exe --dump --nfc --can <CAN> [--retry N]
 
 ### Parameters
 
-- `--retry N`: Number of retry attempts (default: 0 = no retry)
-  - `N` is the number of **additional** attempts after the first one
-  - Total attempts = N + 1
+- `--retry N`: Total number of read attempts (default: 3)
+  - `N` is the total number of attempts
+  - `--retry 1` = single attempt (no retry)
 
 ### Examples
 
-#### No Retry (Default)
+#### Default (3 attempts)
 ```bash
-# Single attempt only
+# Uses default 3 attempts
 eid-pd-reader.exe --dump --nfc --can 775484
+```
+- Total attempts: **3**
+- Delays: 1s, 2s between attempts
+- Connection layer: waits for card presence + retries power-on
+
+#### Single Attempt
+```bash
+# No retry, fail immediately
+eid-pd-reader.exe --dump --nfc --can 775484 --retry 1
 ```
 - Total attempts: **1**
 - Behavior: Fails immediately if first attempt doesn't work
 
-#### One Retry
+#### Five Attempts
 ```bash
-# Initial attempt + 1 retry = 2 total attempts
-eid-pd-reader.exe --dump --nfc --can 775484 --retry 1
+# Maximum reliability
+eid-pd-reader.exe --dump --nfc --can 775484 --retry 5
 ```
-- Total attempts: **2**
-- Behavior: Retries once if first attempt fails
-- Delay between attempts: 500ms
-
-#### Two Retries
-```bash
-# Initial attempt + 2 retries = 3 total attempts
-eid-pd-reader.exe --dump --nfc --can 775484 --retry 2
-```
-- Total attempts: **3**
-- Behavior: Retries up to 2 times if needed
-- Delay between attempts: 500ms
+- Total attempts: **5**
+- Delays: 1s, 2s, 3s, 3s between attempts
 
 #### Verbose Mode
 ```bash
@@ -68,8 +67,9 @@ Connected to NFC reader: ACS ACR1252 1S CL Reader PICC 0 (attempt 2)
 ## Retry Behavior
 
 ### Timing
-- **First attempt**: 300ms initial delay (for card detection)
-- **Subsequent attempts**: 500ms delay between retries
+- **Connection layer**: Uses `SCardGetStatusChange` to wait up to 5s for card presence before connecting
+- **Power-on retry**: Each connection attempt retries the power-on sequence up to 4 times (0ms, 300ms, 500ms, 1000ms delays)
+- **Read-level retry**: Progressive delays between full read attempts (1s, 2s, 3s)
 
 ### What Gets Retried
 Each retry attempt includes:
@@ -79,18 +79,18 @@ Each retry attempt includes:
 
 ### When to Use Retries
 
-#### Recommended: `--retry 1` or `--retry 2`
-- **ACR122U readers**: Often need 1-2 retries
-- **ACR1252U readers**: Usually work on first attempt, but 1 retry is safe
-- **Unstable environments**: Use 2 retries for maximum reliability
+#### Recommended: default (3 attempts) or `--retry 5`
+- **ACR122U readers**: Often need 2-3 attempts
+- **ACR1252U readers**: Usually work on first attempt, but default 3 is safe
+- **Unstable environments**: Use `--retry 5` for maximum reliability
 
-#### Not Recommended: `--retry 0` (default)
+#### Not Recommended: `--retry 1`
 - Only use if you want immediate failure
 - Useful for testing or when you know the reader is reliable
 
-#### Not Recommended: `--retry 5+`
+#### Not Recommended: `--retry 10+`
 - Excessive retries waste time
-- If 3 attempts fail, the issue is likely not transient
+- If 5 attempts fail, the issue is likely not transient
 - Better to check card positioning or reader connection
 
 ## Error Messages
@@ -133,15 +133,15 @@ const response = await chrome.runtime.sendNativeMessage(
 ## Performance Considerations
 
 ### Time Impact
-- **No retry**: ~2-3 seconds (if successful)
-- **1 retry**: ~3-5 seconds (if first fails, second succeeds)
-- **2 retries**: ~4-7 seconds (if first two fail, third succeeds)
+- **1 attempt**: ~2-3 seconds (if successful)
+- **Default (3)**: ~3-8 seconds (if first fails)
+- **5 attempts**: ~5-15 seconds (if multiple fail)
 
 ### Best Practices
-1. **Start with `--retry 1`** for most use cases
-2. **Use `--retry 2`** for production environments where reliability is critical
-3. **Use `--retry 0`** (default) only for testing or known-good readers
-4. **Avoid `--retry 3+`** as it provides diminishing returns
+1. **Use default (3 attempts)** for most use cases — no flag needed
+2. **Use `--retry 5`** for production environments where reliability is critical
+3. **Use `--retry 1`** only for testing or known-good readers
+4. **Avoid `--retry 10+`** as it provides diminishing returns
 
 ## Troubleshooting
 
@@ -169,35 +169,17 @@ If first attempt always fails:
 
 ## Technical Details
 
-### Retry Logic
-```go
-func ReadPersonalDataNFCWithRetry(can string, maxAttempts int) (*PersonalData, error) {
-    for attempt := 1; attempt <= maxAttempts; attempt++ {
-        if attempt > 1 {
-            time.Sleep(500 * time.Millisecond)
-        }
-        
-        pd, err := attemptNFCRead(can, attempt)
-        if err == nil {
-            return pd, nil  // Success!
-        }
-        
-        // Log and continue to next attempt
-    }
-    
-    return nil, fmt.Errorf("all attempts failed")
-}
-```
+### Two-Level Retry Architecture
 
-### First Attempt Delay
-```go
-func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
-    if attemptNum == 1 {
-        time.Sleep(300 * time.Millisecond)  // Initial card detection
-    }
-    // ... proceed with PACE and reading
-}
-```
+**Level 1 — Connection layer (`nfc.ConnectAny`):**
+- Uses `SCardGetStatusChange` to wait for card presence (5s timeout)
+- Retries `SCardConnect` power-on up to 4 times with progressive delays
+- Handles "smart card not responding to reset" errors automatically
+
+**Level 2 — Read layer (`ReadPersonalDataNFCWithRetry`):**
+- Retries the full connection + PACE + read cycle
+- Progressive delays: 1s, 2s, 3s between attempts
+- Disconnects with `ResetCard` disposition between attempts
 
 ## See Also
 

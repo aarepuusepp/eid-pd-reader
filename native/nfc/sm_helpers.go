@@ -47,9 +47,15 @@ func SMReadBinary(sm SM, offset int, maxLength int) ([]byte, error) {
 			}
 		}
 
-		// Check for success
+		// Check for success or EOF warning
+		if sw == 0x6282 {
+			// "End of file reached before reading Le bytes" — append any data and stop
+			if len(data) > 0 {
+				result = append(result, data...)
+			}
+			break
+		}
 		if !IsSuccess(sw) {
-			// If we got some data already and hit EOF, return what we have
 			if len(result) > 0 && (sw == 0x6B00 || sw == 0x6A82) {
 				break
 			}

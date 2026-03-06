@@ -9,9 +9,9 @@ import (
 
 // ReadPersonalDataNFC reads personal data from an Estonian ID card via NFC using PACE + Secure Messaging.
 // Requires the 6-digit CAN (Card Access Number) printed on the card.
-// Uses default retry count of 2 attempts (initial + 1 retry).
+// Uses default retry count of 3 attempts.
 func ReadPersonalDataNFC(can string) (*PersonalData, error) {
-	return ReadPersonalDataNFCWithRetry(can, 2)
+	return ReadPersonalDataNFCWithRetry(can, 3)
 }
 
 // ReadPersonalDataNFCWithRetry reads personal data from an Estonian ID card via NFC with configurable retry count.
@@ -32,43 +32,42 @@ func ReadPersonalDataNFCWithRetry(can string, maxAttempts int) (*PersonalData, e
 		maxAttempts = 1
 	}
 
-	// Try up to maxAttempts times
-	// NFC readers sometimes lose connection on first attempt
+	// Try up to maxAttempts times.
+	// NFC readers (especially ACR1252) sometimes fail on first power-on
+	// when the card isn't fully stable on the RF field.
+	retryDelays := []time.Duration{0, 1 * time.Second, 2 * time.Second, 3 * time.Second, 3 * time.Second}
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if attempt > 1 {
-			logVerbose("Retrying NFC connection (attempt %d/%d)...", attempt, maxAttempts)
-			// Wait 500ms before retry to let the card stabilize
-			time.Sleep(500 * time.Millisecond)
+		delayIdx := attempt - 1
+		if delayIdx >= len(retryDelays) {
+			delayIdx = len(retryDelays) - 1
 		}
-		
+		if attempt > 1 && retryDelays[delayIdx] > 0 {
+			logVerbose("Retrying NFC read (attempt %d/%d) in %v...\n", attempt, maxAttempts, retryDelays[delayIdx])
+			time.Sleep(retryDelays[delayIdx])
+		}
+
 		pd, err := attemptNFCRead(can, attempt)
 		if err == nil {
 			return pd, nil
 		}
-		
+
 		lastErr = err
-		logVerbose("Attempt %d failed: %v", attempt, err)
+		logVerbose("Attempt %d/%d failed: %v\n", attempt, maxAttempts, err)
 	}
 	
 	return nil, fmt.Errorf("all NFC read attempts failed: %w", lastErr)
 }
 
-// attemptNFCRead performs a single NFC read attempt
+// attemptNFCRead performs a single NFC read attempt.
 func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
-	// Give NFC reader time to detect card on first attempt
-	// NFC readers need a moment to initialize the card
-	if attemptNum == 1 {
-		time.Sleep(300 * time.Millisecond)
-	}
-	
-	// Connect to NFC reader
+	// Connect to NFC reader (ConnectAny waits for card presence and retries power-on)
 	ctx, card, readerName, err := nfc.ConnectAny()
 	if err != nil {
 		return nil, fmt.Errorf("NFC connection failed: %w", err)
 	}
 	defer ctx.Release()
-	defer card.Disconnect(0)
+	defer card.Disconnect(2) // UnpowerCard — drops RF field without triggering a reset IOCTL
 
 	logVerbose("Connected to NFC reader: %s (attempt %d)", readerName, attemptNum)
 
@@ -81,50 +80,67 @@ func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
 
 	logVerbose("PACE established successfully; Secure Messaging active")
 
-	// Correct sequence for Thales cards after PACE (per nfc_sm_debug.md):
-	// 1. SELECT AID (PKCS-15 for Thales cards)
-	// 2. SELECT DFDD by path
-	// 3. SELECT EF 500x + READ BINARY
-	
-	logVerbose("Selecting PKCS-15 AID via SM...")
-	pkcs15AID := []byte{0xA0, 0x00, 0x00, 0x00, 0x63, 0x50, 0x4B, 0x43, 0x53, 0x2D, 0x31, 0x35}
-	_, sw, err := sm.Transmit(APDUSelectAID(pkcs15AID))
-	if err != nil {
-		logVerbose("Warning: SELECT PKCS-15 AID failed: %v (SW=%04X)", err, sw)
-	} else if IsSuccess(sw) {
-		logVerbose("PKCS-15 AID selected via SM")
+	// Navigate to personal data directory before reading files.
+	// IDEMIA cards: personal data files 5001-5009 are under DF 5000 (direct child of MF).
+	// Thales cards: personal data files 5001-5009 are under DF.DocumentData (FID DFDD),
+	//   which is a subdirectory of the eID application (PKCS-15 AID).
+	//   The eID app also has PKCS-15 directory files with overlapping FIDs (5001, 5003, etc.),
+	//   so we MUST select DFDD to reach the correct personal data files.
+
+	personalDataDirSelected := false
+
+	// Approach 1: SELECT DF 5000 (works for IDEMIA cards)
+	logVerbose("Selecting DF 5000 (Personal Data) via SM...")
+	_, sw, err := sm.Transmit(APDUSelectDF(FID_DF_PERSONAL))
+	if err == nil && IsSuccess(sw) {
+		logVerbose("DF 5000 (Personal Data) selected via SM")
+		personalDataDirSelected = true
 	} else {
-		logVerbose("SELECT PKCS-15 AID returned SW=%04X, trying EstEID AID...", sw)
-		// Try EstEID AID as fallback
-		esteidAID := []byte{0xA0, 0x00, 0x00, 0x00, 0x77, 0x01, 0x08, 0x00, 0x07, 0x00, 0x00, 0xFE, 0x00, 0x00, 0x01, 0x00}
-		_, sw, err = sm.Transmit(APDUSelectAID(esteidAID))
-		if err != nil {
-			logVerbose("Warning: SELECT EstEID AID failed: %v (SW=%04X)", err, sw)
-		} else if IsSuccess(sw) {
-			logVerbose("EstEID AID selected via SM")
+		logVerbose("SELECT DF 5000 failed (SW=%04X), trying Thales eID approach...", sw)
+
+		// Approach 2: Thales path — SELECT PKCS-15 AID, then navigate to DF.DocumentData
+		pkcs15AID := []byte{0xA0, 0x00, 0x00, 0x00, 0x63, 0x50, 0x4B, 0x43, 0x53, 0x2D, 0x31, 0x35}
+		_, sw, err = sm.Transmit(APDUSelectAID(pkcs15AID))
+		if err == nil && IsSuccess(sw) {
+			logVerbose("PKCS-15 AID (eID application) selected via SM")
+
+			// Try multiple methods to select DF.DocumentData:
+			// Method 1: By AID "Document Data" (446F63756D656E742044617461) per developer guide
+			docDataAID := []byte{0x44, 0x6F, 0x63, 0x75, 0x6D, 0x65, 0x6E, 0x74, 0x20, 0x44, 0x61, 0x74, 0x61}
+			_, sw, err = sm.Transmit(APDUSelectAID(docDataAID))
+			if err == nil && IsSuccess(sw) {
+				logVerbose("DF.DocumentData selected by AID via SM")
+				personalDataDirSelected = true
+			} else {
+				logVerbose("SELECT DF.DocumentData by AID failed (SW=%04X), trying by path...", sw)
+
+				// Method 2: By path from current DF (P1=09) — DFDD as child of eID app
+				dfddFromDF := []byte{0x00, 0xA4, 0x09, 0x0C, 0x02, 0xDF, 0xDD}
+				_, sw, err = sm.Transmit(dfddFromDF)
+				if err == nil && IsSuccess(sw) {
+					logVerbose("DF.DocumentData (DFDD) selected by path from DF via SM")
+					personalDataDirSelected = true
+				} else {
+					logVerbose("SELECT DFDD from DF failed (SW=%04X), trying absolute path...", sw)
+
+					// Method 3: By absolute path from MF (P1=08)
+					dfddFromMF := []byte{0x00, 0xA4, 0x08, 0x0C, 0x02, 0xDF, 0xDD}
+					_, sw, err = sm.Transmit(dfddFromMF)
+					if err == nil && IsSuccess(sw) {
+						logVerbose("DF.DocumentData (DFDD) selected by absolute path via SM")
+						personalDataDirSelected = true
+					} else {
+						logVerbose("SELECT DFDD by absolute path failed (SW=%04X)", sw)
+					}
+				}
+			}
 		} else {
-			logVerbose("SELECT EstEID AID returned SW=%04X, continuing anyway", sw)
+			logVerbose("SELECT PKCS-15 AID failed (SW=%04X)", sw)
 		}
 	}
 
-	// 2. SELECT DFDD by path (00 A4 08 0C 02 DF DD)
-	logVerbose("Selecting DFDD by path via SM...")
-	dfddFID := [2]byte{0xDF, 0xDD}
-	dfddAPDU := []byte{0x00, 0xA4, 0x08, 0x0C, 0x02, dfddFID[0], dfddFID[1]}
-	_, sw, err = sm.Transmit(dfddAPDU)
-	if err != nil {
-		logVerbose("Warning: SELECT DFDD failed: %v (SW=%04X), continuing anyway", err, sw)
-	} else if IsSuccess(sw) {
-		logVerbose("DFDD selected via SM")
-	} else {
-		logVerbose("SELECT DFDD returned SW=%04X, trying DF 5000...", sw)
-		// Fallback: try DF 5000
-		_, sw, err = sm.Transmit(APDUSelectDF(FID_DF_PERSONAL))
-		if err != nil {
-			logVerbose("Warning: SELECT DF 5000 failed: %v (SW=%04X)", err, sw)
-		} else if IsSuccess(sw) {
-			logVerbose("DF 5000 (Personal Data) selected via SM")
-		}
+	if !personalDataDirSelected {
+		logVerbose("Warning: could not select personal data directory, will try reading anyway")
 	}
 
 	// Read personal data fields
@@ -168,7 +184,8 @@ func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
 	// If GET DATA didn't work, try SELECT+READ approach
 	if pd.Surname == "" && pd.GivenName == "" {
 		logVerbose("GET DATA approach failed, trying SELECT+READ...")
-		
+
+		filesAccessed := 0
 		fields := []struct {
 			fid  [2]byte
 			name string
@@ -191,16 +208,22 @@ func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
 			data, err := nfc.SMSelectAndRead(sm, field.fid, 512)
 			if err != nil {
 				logVerbose("Warning: failed to read %s: %v", field.name, err)
-				continue // Skip failed fields, continue with others
+				continue
 			}
 
+			filesAccessed++
 			text := BytesToCleanText(data)
 			*field.dest = text
 			logVerbose("  %s: %s", field.name, text)
 		}
+
+		// If files were accessible but empty, the card has no personal data — not an error
+		if filesAccessed > 0 && pd.Surname == "" && pd.GivenName == "" && pd.PersonalCode == "" {
+			logVerbose("Card files accessible but contain no personal data (unpersonalized or test card)")
+			return pd, nil
+		}
 	}
 
-	// Validate that we got at least some critical fields
 	if pd.Surname == "" && pd.GivenName == "" && pd.PersonalCode == "" {
 		return nil, fmt.Errorf("failed to read any personal data fields (tried GET DATA and SELECT+READ)")
 	}

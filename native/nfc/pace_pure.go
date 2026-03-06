@@ -35,21 +35,22 @@ func StartPACE(card *scard.Card, can string) (SM, error) {
 	// protocol (AES-128/192/256) and curve (P-256, brainpool, etc.)
 	// We pass default values here, but PerformPACE will override them
 	// based on what the card advertises in CardAccess
-	fmt.Printf("[PACE] Starting PACE protocol with CAN: %s\n", can)
+	logVerbose("[PACE] Starting PACE protocol with CAN: %s\n", can)
 
-	// Use AES-256 + brainpoolP256r1 as default (will be overridden by CardAccess)
+	// Defaults for IDEMIA cards (ECDH-GM-AES256 + secp256r1).
+	// PerformPACE reads EF.CardAccess and overrides with the actual values.
 	smCtx, err := pace.PerformPACE(
 		cardAdapter,
 		secret,
-		pace.OID_PACE_ECDH_IM_AES256, // Will be updated from CardAccess
-		16,                           // brainpoolP256r1 - will be updated from CardAccess
+		pace.OID_PACE_ECDH_GM_AES256,
+		12, // secp256r1/NIST P-256 (BSI TR-03110 ParamID 12), overridden from CardAccess
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("PACE establishment failed: %w", err)
 	}
 
-	fmt.Printf("[PACE] Success! K_enc=%X K_mac=%X SSC0=%X\n",
+	logVerbose("[PACE] Success! K_enc=%X K_mac=%X SSC0=%X\n",
 		smCtx.EncryptionKey, smCtx.MACKey, smCtx.SSC)
 
 	// Wrap the SM context in our adapter

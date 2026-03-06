@@ -1,0 +1,10 @@
+{
+  "name": "ee.aarepuusepp.eid_pd_reader",
+  "description": "Estonian ID Card Personal Data Reader",
+  "path": "C:\\Program Files\\eid-pd-reader\\eid-pd-reader.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://YOUR_EXTENSION_ID/"
+  ]
+}
+

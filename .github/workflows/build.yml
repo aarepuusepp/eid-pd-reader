@@ -10,12 +10,12 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.26.0'
       
       - name: Build
         run: |
@@ -24,7 +24,7 @@ jobs:
           go build -o eid-pd-reader.exe ./cmd/eid-pd-reader
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: eid-pd-reader-windows
           path: eid-pd-reader/eid-pd-reader.exe
@@ -32,12 +32,12 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.26.0'
       
       - name: Install PC/SC dependencies
         run: |
@@ -51,7 +51,7 @@ jobs:
           go build -o eid-pd-reader ./cmd/eid-pd-reader
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: eid-pd-reader-linux
           path: eid-pd-reader/eid-pd-reader
@@ -59,12 +59,12 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.26.0'
       
       - name: Build
         run: |
@@ -73,7 +73,7 @@ jobs:
           go build -o eid-pd-reader ./cmd/eid-pd-reader
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: eid-pd-reader-macos
           path: eid-pd-reader/eid-pd-reader
@@ -81,24 +81,35 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25.4'
+          go-version: '1.26.0'
       
-      - name: Run tests
+      - name: Install PC/SC dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpcsclite-dev pcscd
+
+      - name: Run libopenpace-go tests
+        run: |
+          cd libopenpace-go
+          go mod tidy
+          go test ./...
+
+      - name: Run eid-pd-reader tests
         run: |
           cd eid-pd-reader
           go mod tidy
-          go test ./native/internal/apdu/...
-          go test ./native/internal/esteid/...
+          go test ./native/apdu/...
+          go test ./native/esteid/...
 
   package-extension:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Package extension
         run: |
@@ -106,7 +117,7 @@ jobs:
           zip -r ../../eid-pd-extension.zip . -x "*.DS_Store"
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: eid-pd-extension-package
           path: eid-pd-extension.zip

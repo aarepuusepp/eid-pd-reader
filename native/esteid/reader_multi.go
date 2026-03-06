@@ -3,18 +3,24 @@ package esteid
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ebfe/scard"
 )
 
-// CardResult represents a card read from a specific reader
+// CardResult represents a card read from a specific reader.
 type CardResult struct {
 	Reader       string        `json:"reader"`
+	Duration     string        `json:"duration"`
 	PersonalData *PersonalData `json:"data,omitempty"`
 	Error        string        `json:"error,omitempty"`
 }
 
-// ReadPersonalDataFromAllReaders reads from all available readers and returns results
+// perReaderTimeout limits how long we spend trying to read from a single reader.
+const perReaderTimeout = 15 * time.Second
+
+// ReadPersonalDataFromAllReaders reads from all available contact readers and returns results.
+// NFC/contactless readers (PICC/SAM) are skipped — they require PACE via --nfc flag.
 func ReadPersonalDataFromAllReaders(optionalFIDs map[string]string) ([]CardResult, error) {
 	ctx, err := scard.EstablishContext()
 	if err != nil {
@@ -32,38 +38,81 @@ func ReadPersonalDataFromAllReaders(optionalFIDs map[string]string) ([]CardResul
 
 	results := make([]CardResult, 0, len(rdrs))
 
-	// Try to read from each reader
 	for _, readerName := range rdrs {
-		result := CardResult{Reader: readerName}
-		
-		card, err := ctx.Connect(readerName, scard.ShareShared, scard.ProtocolAny)
-		if err != nil {
-			errMsg := err.Error()
-			// Check for "no card" errors
-			if strings.Contains(errMsg, "SCARD_E_NO_SMARTCARD") ||
-				strings.Contains(errMsg, "SCARD_W_REMOVED_CARD") ||
-				strings.Contains(errMsg, "error(8010000C)") {
-				result.Error = "no card present"
-			} else {
-				result.Error = fmt.Sprintf("connection failed: %v", err)
-			}
-			results = append(results, result)
+		// Skip NFC/contactless readers — they need PACE and the --nfc flag.
+		if strings.Contains(readerName, "PICC") || strings.Contains(readerName, "SAM") {
+			logVerbose("Skipping NFC reader in contact mode: %s", readerName)
 			continue
 		}
 
-		// Try to read personal data from this card
-		pd, err := readPersonalDataFromCard(card, readerName, optionalFIDs)
-		card.Disconnect(scard.LeaveCard)
-		
-		if err != nil {
-			result.Error = err.Error()
-		} else {
-			result.PersonalData = pd
-		}
+		result := readFromReaderWithTimeout(ctx, readerName, optionalFIDs)
 		results = append(results, result)
 	}
 
 	return results, nil
+}
+
+// readFromReaderWithTimeout connects to a single reader, reads personal data, and
+// enforces a timeout so that a stuck reader cannot block the entire operation.
+func readFromReaderWithTimeout(ctx *scard.Context, readerName string, optionalFIDs map[string]string) CardResult {
+	type readResult struct {
+		pd  *PersonalData
+		err error
+	}
+
+	ch := make(chan readResult, 1)
+	start := time.Now()
+
+	go func() {
+		pd, err := connectAndRead(ctx, readerName, optionalFIDs)
+		ch <- readResult{pd: pd, err: err}
+	}()
+
+	select {
+	case res := <-ch:
+		result := CardResult{Reader: readerName, Duration: FormatDuration(time.Since(start))}
+		if res.err != nil {
+			result.Error = res.err.Error()
+		} else {
+			result.PersonalData = res.pd
+		}
+		return result
+
+	case <-time.After(perReaderTimeout):
+		logVerbose("Timeout reading from reader: %s", readerName)
+		return CardResult{
+			Reader:   readerName,
+			Duration: FormatDuration(time.Since(start)),
+			Error:    fmt.Sprintf("timeout after %s", perReaderTimeout),
+		}
+	}
+}
+
+// FormatDuration formats a duration as human-readable "Xms" or "Xµs".
+func FormatDuration(d time.Duration) string {
+	if d < time.Millisecond {
+		return fmt.Sprintf("%dµs", d.Microseconds())
+	}
+	return fmt.Sprintf("%dms", d.Milliseconds())
+}
+
+// connectAndRead handles the connect → read → disconnect sequence for one reader.
+func connectAndRead(ctx *scard.Context, readerName string, optionalFIDs map[string]string) (*PersonalData, error) {
+	card, err := ctx.Connect(readerName, scard.ShareShared, scard.ProtocolAny)
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "SCARD_E_NO_SMARTCARD") ||
+			strings.Contains(errMsg, "SCARD_W_REMOVED_CARD") ||
+			strings.Contains(errMsg, "SCARD_W_UNRESPONSIVE_CARD") ||
+			strings.Contains(errMsg, "error(8010000C)") ||
+			strings.Contains(errMsg, "error(80100069)") {
+			return nil, fmt.Errorf("no card present")
+		}
+		return nil, fmt.Errorf("connection failed: %v", err)
+	}
+	defer card.Disconnect(scard.LeaveCard)
+
+	return readPersonalDataFromCard(card, readerName, optionalFIDs)
 }
 
 // readPersonalDataFromCard reads from a specific card (extracted for reuse)
