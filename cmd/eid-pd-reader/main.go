@@ -11,6 +11,7 @@ import (
 	"ee.aarepuusepp.eid-pd-reader/native/config"
 	"ee.aarepuusepp.eid-pd-reader/native/esteid"
 	"ee.aarepuusepp.eid-pd-reader/native/logger"
+	"ee.aarepuusepp.eid-pd-reader/native/nfc"
 )
 
 // Version information
@@ -326,17 +327,7 @@ func main() {
 
 // isNFCSupported checks if NFC/PACE support is available in this build.
 func isNFCSupported() bool {
-	// Try to call ReadPersonalDataNFC with an invalid CAN to check if PACE is available
-	// This is a build-time check - if built without -tags openpace, it will return an error
-	_, err := esteid.ReadPersonalDataNFC("000000")
-	if err != nil && (err.Error() == "PACE not available: rebuild eid-pd-reader with -tags openpace and install OpenPACE library" ||
-		err.Error() == "NFC connection failed: no NFC reader available or no card present") {
-		// First error means PACE stub (no OpenPACE)
-		// Second error means OpenPACE is available but no reader/card
-		return err.Error() != "PACE not available: rebuild eid-pd-reader with -tags openpace and install OpenPACE library"
-	}
-	// Any other error (like CAN validation) means NFC is supported
-	return true
+	return nfc.PACEAvailable_Pure()
 }
 
 // isStdinTerminal checks if stdin is a terminal (interactive mode).
