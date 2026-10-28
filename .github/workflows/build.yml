@@ -15,7 +15,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.0'
+          go-version: '1.27.3'
       
       - name: Build
         run: |
@@ -37,7 +37,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.0'
+          go-version: '1.27.3'
       
       - name: Install PC/SC dependencies
         run: |
@@ -64,7 +64,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.0'
+          go-version: '1.27.3'
       
       - name: Build
         run: |
@@ -86,7 +86,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.0'
+          go-version: '1.27.3'
       
       - name: Install PC/SC dependencies
         run: |

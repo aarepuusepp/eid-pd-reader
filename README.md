@@ -231,7 +231,7 @@ See [Supported Cards](./docs/reference/SUPPORTED-CARDS.md) for details.
 
 ### Linux
 - PC/SC Lite: `sudo apt-get install pcscd libpcsclite-dev`
-- Go 1.26+ (for building from source)
+- Go 1.27.3+ (for building from source)
 
 ### macOS
 - macOS 10.15+ (Catalina or later)
@@ -267,7 +267,7 @@ MIT License
 
 ## Version
 
-Current version: 2.0.0
+Current version: 2.0.1
 
 See [Release Notes](./docs/releases/) for changelog.
 

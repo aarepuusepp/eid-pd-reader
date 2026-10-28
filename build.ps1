@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 
-# Set Go 1.26.0 paths
+# Set Go 1.27.3 paths
 $env:GOROOT = "C:\Program Files\Go"
 $env:PATH = "$env:GOROOT\bin;" + $env:PATH
 

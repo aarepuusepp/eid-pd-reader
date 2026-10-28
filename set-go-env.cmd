@@ -1,4 +1,4 @@
-SET GO_VERSION=1.26.0
+SET GO_VERSION=1.27.3
 
 set GOVERSION=go%GO_VERSION%
 set GOROOT=C:/usr/local/go/go-%GO_VERSION%-win64

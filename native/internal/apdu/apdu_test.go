@@ -16,8 +16,13 @@ func TestAPDUBytes(t *testing.T) {
 			want: []byte{0x00, 0xA4, 0x00, 0x0C, 0x02, 0x3F, 0x00},
 		},
 		{
-			name: "READ BINARY with Le",
+			name: "READ BINARY with Le 256 encoded as zero",
 			apdu: APDU{CLA: 0x00, INS: 0xB0, P1: 0x00, P2: 0x00, Data: nil, Le: 256},
+			want: []byte{0x00, 0xB0, 0x00, 0x00, 0x00},
+		},
+		{
+			name: "READ BINARY with Le 255",
+			apdu: APDU{CLA: 0x00, INS: 0xB0, P1: 0x00, P2: 0x00, Le: 255},
 			want: []byte{0x00, 0xB0, 0x00, 0x00, 0xFF},
 		},
 		{
@@ -45,32 +50,32 @@ func TestAPDUBytes(t *testing.T) {
 
 func TestStatusWord(t *testing.T) {
 	tests := []struct {
-		name string
-		resp []byte
+		name    string
+		resp    []byte
 		wantSW1 byte
 		wantSW2 byte
 	}{
 		{
-			name: "Success response",
-			resp: []byte{0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x90, 0x00},
+			name:    "Success response",
+			resp:    []byte{0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x90, 0x00},
 			wantSW1: 0x90,
 			wantSW2: 0x00,
 		},
 		{
-			name: "Error response",
-			resp: []byte{0x6A, 0x82},
+			name:    "Error response",
+			resp:    []byte{0x6A, 0x82},
 			wantSW1: 0x6A,
 			wantSW2: 0x82,
 		},
 		{
-			name: "Short response",
-			resp: []byte{0x90},
+			name:    "Short response",
+			resp:    []byte{0x90},
 			wantSW1: 0x6F,
 			wantSW2: 0x00,
 		},
 		{
-			name: "Empty response",
-			resp: []byte{},
+			name:    "Empty response",
+			resp:    []byte{},
 			wantSW1: 0x6F,
 			wantSW2: 0x00,
 		},
@@ -171,4 +176,3 @@ func TestCheckOK(t *testing.T) {
 		})
 	}
 }
-
