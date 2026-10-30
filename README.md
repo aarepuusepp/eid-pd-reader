@@ -15,6 +15,13 @@ The eid-pd-reader is a Go-based native application that communicates with PC/SC 
 - **Cross-Platform:** Windows, Linux, macOS
 - **Pure Go:** No C dependencies except PC/SC (uses libopenpace-go for PACE protocol)
 
+## Reproducible source dependencies
+
+`libcdoc-go/v2 v2.0.5` is a published Go module and is downloaded using `go.sum`.
+No sibling `libcdoc-go` checkout or Go workspace is needed. The pinned
+`libopenpace-go` source remains in `third_party/libopenpace-go` with provenance
+and its original license. Build with `GOWORK=off` to avoid local workspace overrides.
+
 ## Installation
 
 ### Windows
