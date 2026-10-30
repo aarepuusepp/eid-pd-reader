@@ -6,17 +6,19 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"ee.aarepuusepp.eid-pd-reader/native/config"
 	"ee.aarepuusepp.eid-pd-reader/native/esteid"
 	"ee.aarepuusepp.eid-pd-reader/native/logger"
 	"ee.aarepuusepp.eid-pd-reader/native/nfc"
+	"ee.aarepuusepp.eid-pd-reader/native/policy"
 )
 
 // Version information
 const (
-	Version = "2.0.1"
+	Version = "2.1.1"
 	AppName = "eid-pd-reader"
 )
 
@@ -32,12 +34,26 @@ const (
 // or {"ok":false, "error":"..."}
 
 type request struct {
-	Command string            `json:"command"` // New field name for consistency
-	Cmd     string            `json:"cmd"`     // Legacy field name
-	FIDs    map[string]string `json:"fids"`
-	CAN     string            `json:"can"`   // Card Access Number for NFC/PACE
-	Mode    string            `json:"mode"`  // "contact" or "nfc"
-	Retry   int               `json:"retry"` // NFC retry count (0 = default 3)
+	Origin          string            `json:"origin"`
+	Command         string            `json:"command"` // New field name for consistency
+	Cmd             string            `json:"cmd"`     // Legacy field name
+	FIDs            map[string]string `json:"fids"`
+	CAN             string            `json:"can"`             // Card Access Number for NFC/PACE
+	Mode            string            `json:"mode"`            // "contact" or "nfc"
+	Retry           int               `json:"retry"`           // NFC retry count (0 = default 3)
+	ContainerBase64 string            `json:"containerBase64"` // CDOC bytes encoded as base64
+	PIN             string            `json:"pin"`             // optional; native prompt used when empty
+	PKCS11          pkcs11Request     `json:"pkcs11"`
+	Certificate     string            `json:"certificate"`
+	Challenge       json.RawMessage   `json:"challenge"`
+	Lang            string            `json:"lang"`
+}
+
+type pkcs11Request struct {
+	LibraryPath string `json:"libraryPath"`
+	Slot        *int   `json:"slot"`
+	Label       string `json:"label"`
+	KeyIDHex    string `json:"keyIdHex"`
 }
 
 type response struct {
@@ -82,6 +98,11 @@ func main() {
 	}
 
 	// Load configuration
+	if *configPath == "" && !*dumpFlag && !*debugFlag {
+		if machineDir, dirErr := policy.DataDirectory(); dirErr == nil {
+			*configPath = filepath.Join(machineDir, "eid-pd-reader", "config.yaml")
+		}
+	}
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
@@ -225,6 +246,33 @@ func main() {
 			command = req.Cmd
 		}
 
+		if command == "policy" {
+			p, err := policy.Load()
+			if err != nil {
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": "Invalid machine access policy", "errorCode": "ERR_EIDPD_POLICY_INVALID"})
+			} else {
+				_ = writeNativeMessage(map[string]interface{}{"ok": true, "data": p, "protocol": 1})
+			}
+			continue
+		}
+		if command != "status" && command != "version" && command != "ping" && command != "capabilities" {
+			p, err := policy.Load()
+			if err != nil {
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": "Invalid machine access policy", "errorCode": "ERR_EIDPD_POLICY_INVALID"})
+				continue
+			}
+			action, err := p.Action(req.Origin)
+			if err != nil || action == "deny" {
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": "Website access denied", "errorCode": "ERR_EIDPD_SITE_DENIED"})
+				continue
+			}
+			// Only the trusted extension can grant 'ask'. Never accept PINs or library paths from a page.
+			if req.PIN != "" || req.PKCS11.LibraryPath != "" || req.PKCS11.Slot != nil || req.PKCS11.Label != "" || req.PKCS11.KeyIDHex != "" {
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": "Native PIN and machine PKCS11 configuration are required", "errorCode": "ERR_EIDPD_INVALID_REQUEST"})
+				continue
+			}
+		}
+
 		switch command {
 		case "ping":
 			logger.LogNativeMessage("request", "ping", true, "")
@@ -304,11 +352,136 @@ func main() {
 				Results:   results,
 			})
 
+		case "status":
+			logger.LogNativeMessage("request", "status", true, "")
+			_ = writeNativeMessage(map[string]interface{}{
+				"ok":        true,
+				"timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				"duration":  esteid.FormatDuration(time.Since(startTime)),
+				"data": map[string]interface{}{
+					"protocol":     1,
+					"diagnostics":  esteid.Diagnostics(cfg.PKCS11.LibraryPath),
+					"version":      Version,
+					"name":         AppName,
+					"nativeApp":    Version,
+					"cdocVersions": []string{"1.0", "1.1"},
+				},
+			})
+
+		case "get-decrypt-certificate", "getTokenCertificate":
+			logger.LogNativeMessage("request", command, true, "")
+			p11Cfg, err := esteid.ResolvePKCS11Config(
+				cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex,
+				req.PKCS11.LibraryPath, req.PKCS11.Slot, req.PKCS11.Label, req.PKCS11.KeyIDHex,
+				req.PIN, true,
+			)
+			if err != nil {
+				_ = writeNativeMessage(map[string]interface{}{
+					"ok": false, "error": err.Error(), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				})
+				continue
+			}
+			result, err := esteid.GetDecryptCertificate(p11Cfg)
+			if err != nil {
+				_ = writeNativeMessage(map[string]interface{}{
+					"ok": false, "error": err.Error(), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				})
+				continue
+			}
+			_ = writeNativeMessage(map[string]interface{}{
+				"ok": true, "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				"duration": esteid.FormatDuration(time.Since(startTime)), "data": result,
+			})
+
+		case "unwrap-transport-key", "unwrapTransportKey":
+			logger.LogNativeMessage("request", command, true, "")
+			p11Cfg, err := esteid.ResolvePKCS11Config(
+				cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex,
+				req.PKCS11.LibraryPath, req.PKCS11.Slot, req.PKCS11.Label, req.PKCS11.KeyIDHex,
+				req.PIN, true,
+			)
+			if err != nil {
+				_ = writeNativeMessage(map[string]interface{}{
+					"ok": false, "error": err.Error(), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				})
+				continue
+			}
+			result, err := esteid.UnwrapTransportKey(p11Cfg, req.Challenge, req.Certificate)
+			if err != nil {
+				_ = writeNativeMessage(map[string]interface{}{
+					"ok": false, "error": err.Error(), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				})
+				continue
+			}
+			_ = writeNativeMessage(map[string]interface{}{
+				"ok": true, "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				"duration": esteid.FormatDuration(time.Since(startTime)), "data": result,
+			})
+
+		case "decryptContainer":
+			resolved, resolveErr := esteid.ResolvePKCS11Config(cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex, "", nil, "", "", "", true)
+			if resolveErr != nil {
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": resolveErr.Error()})
+				continue
+			}
+			req.PIN = resolved.PIN
+			req.PKCS11.LibraryPath = resolved.LibraryPath
+			logger.LogNativeMessage("request", command, true, fmt.Sprintf("containerBase64 bytes: %d", len(req.ContainerBase64)))
+			slot := cfg.PKCS11.Slot
+			if req.PKCS11.Slot != nil {
+				slot = *req.PKCS11.Slot
+			}
+			libraryPath := cfg.PKCS11.LibraryPath
+			if req.PKCS11.LibraryPath != "" {
+				libraryPath = req.PKCS11.LibraryPath
+			}
+			label := cfg.PKCS11.Label
+			if req.PKCS11.Label != "" {
+				label = req.PKCS11.Label
+			}
+			keyIDHex := cfg.PKCS11.KeyIDHex
+			if req.PKCS11.KeyIDHex != "" {
+				keyIDHex = req.PKCS11.KeyIDHex
+			}
+
+			result, err := esteid.DecryptContainer(esteid.DecryptOptions{
+				ContainerBase64: req.ContainerBase64,
+				PKCS11Library:   libraryPath,
+				PIN:             req.PIN,
+				Slot:            slot,
+				Label:           label,
+				KeyIDHex:        keyIDHex,
+			})
+			if err != nil {
+				logger.LogNativeMessage("response", command, false, err.Error())
+				_ = writeNativeMessage(map[string]interface{}{
+					"ok":        false,
+					"timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+					"duration":  esteid.FormatDuration(time.Since(startTime)),
+					"error":     err.Error(),
+				})
+				continue
+			}
+			logger.LogNativeMessage("response", command, true, fmt.Sprintf("files: %d", result.FileCount))
+			_ = writeNativeMessage(map[string]interface{}{
+				"ok":        true,
+				"timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+				"duration":  esteid.FormatDuration(time.Since(startTime)),
+				"data":      result,
+			})
+
 		case "capabilities":
 			logger.LogNativeMessage("request", "capabilities", true, "")
 			caps := map[string]interface{}{
-				"nfcSupported": isNFCSupported(),
-				"version":      Version,
+				"nfcSupported":          isNFCSupported(),
+				"cdocDecryptSupported":  true,
+				"clientUnwrapSupported": true,
+				"pkcs11RSASupported":    true,
+				"pkcs11ECSupported":     true,
+				"pkcs11Configured":      cfg.PKCS11.LibraryPath != "" || esteid.DefaultPKCS11LibraryPath() != "",
+				"version":               Version,
+				"nativeApp":             Version,
+				"cdocVersions":          []string{"1.0", "1.1"},
 			}
 			_ = writeNativeMessage(map[string]interface{}{
 				"ok":        true,

@@ -15,17 +15,18 @@ type Config struct {
 	Cache    CacheConfig    `yaml:"cache"`
 	Security SecurityConfig `yaml:"security"`
 	Advanced AdvancedConfig `yaml:"advanced"`
+	PKCS11   PKCS11Config   `yaml:"pkcs11"`
 }
 
 // LoggingConfig holds logging configuration
 type LoggingConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	Level       string `yaml:"level"`
-	File        string `yaml:"file"`
-	MaxSizeMB   int    `yaml:"max_size_mb"`
-	MaxBackups  int    `yaml:"max_backups"`
-	MaxAgeDays  int    `yaml:"max_age_days"`
-	Compress    bool   `yaml:"compress"`
+	Enabled    bool   `yaml:"enabled"`
+	Level      string `yaml:"level"`
+	File       string `yaml:"file"`
+	MaxSizeMB  int    `yaml:"max_size_mb"`
+	MaxBackups int    `yaml:"max_backups"`
+	MaxAgeDays int    `yaml:"max_age_days"`
+	Compress   bool   `yaml:"compress"`
 }
 
 // CardConfig holds card reader configuration
@@ -51,6 +52,14 @@ type SecurityConfig struct {
 type AdvancedConfig struct {
 	VerboseAPDU bool              `yaml:"verbose_apdu"`
 	CustomFIDs  map[string]string `yaml:"custom_fids"`
+}
+
+// PKCS11Config holds defaults for local token decryption.
+type PKCS11Config struct {
+	LibraryPath string `yaml:"library_path"`
+	Slot        int    `yaml:"slot"`
+	Label       string `yaml:"label"`
+	KeyIDHex    string `yaml:"key_id_hex"`
 }
 
 // Default returns the default configuration
@@ -81,6 +90,12 @@ func Default() *Config {
 		Advanced: AdvancedConfig{
 			VerboseAPDU: false,
 			CustomFIDs:  make(map[string]string),
+		},
+		PKCS11: PKCS11Config{
+			LibraryPath: "",
+			Slot:        0,
+			Label:       "",
+			KeyIDHex:    "",
 		},
 	}
 }
@@ -122,8 +137,8 @@ func Load(path string) (*Config, error) {
 func findConfigFile() string {
 	// Possible locations (in order of preference)
 	locations := []string{
-		"config.yaml",                                    // Current directory
-		"./config.yaml",                                  // Explicit current directory
+		"config.yaml",   // Current directory
+		"./config.yaml", // Explicit current directory
 		filepath.Join(getExecutableDir(), "config.yaml"), // Same directory as executable
 	}
 
@@ -169,4 +184,3 @@ func getConfigDir() string {
 
 	return ""
 }
-

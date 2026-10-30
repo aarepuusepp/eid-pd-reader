@@ -140,6 +140,25 @@ Response:
 }
 ```
 
+Decryption request:
+```json
+{
+  "command": "decryptContainer",
+  "containerBase64": "base64-encoded-cdoc",
+  "pin": "1234",
+  "pkcs11": {
+    "libraryPath": "C:\\Program Files\\OpenSC Project\\OpenSC\\pkcs11\\opensc-pkcs11.dll",
+    "slot": 0,
+    "label": "",
+    "keyIdHex": ""
+  }
+}
+```
+
+The `pkcs11` object can be omitted when `config.yaml` contains `pkcs11.library_path`. PIN1 is never read from config and must be supplied per request.
+
+PKCS#11 decryption supports RSA keys and EC keys through `CKM_ECDH1_DERIVE`. EC token compatibility depends on the local PKCS#11 module allowing the derived shared secret to be read from the temporary session key.
+
 ## Building
 
 NFC support is built-in using the pure Go `libopenpace-go` library. No special build steps required.

@@ -35,7 +35,7 @@ echo Manifest: %MANIFEST_PATH%
 echo.
 
 REM Register for Firefox
-reg add "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f
+reg add "HKLM\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f
 
 if %errorLevel% equ 0 (
     echo.

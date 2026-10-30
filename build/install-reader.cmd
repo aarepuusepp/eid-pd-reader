@@ -156,7 +156,7 @@ REM ============================================================================
 echo [4/6] Registering native host for Chrome...
 echo.
 
-reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /ve /t REG_SZ /d "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json" /f >nul 2>&1
+reg add "HKLM\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /ve /t REG_SZ /d "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json" /f >nul 2>&1
 
 if %errorLevel% equ 0 (
     echo     [OK] Chrome native host registered
@@ -170,7 +170,7 @@ REM ============================================================================
 echo [5/6] Registering native host for Edge...
 echo.
 
-reg add "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /ve /t REG_SZ /d "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json" /f >nul 2>&1
+reg add "HKLM\Software\Microsoft\Edge\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /ve /t REG_SZ /d "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json" /f >nul 2>&1
 
 if %errorLevel% equ 0 (
     echo     [OK] Edge native host registered
@@ -184,7 +184,7 @@ REM ============================================================================
 echo [6/6] Registering native host for Firefox...
 echo.
 
-reg add "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /ve /t REG_SZ /d "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json" /f >nul 2>&1
+reg add "HKLM\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /ve /t REG_SZ /d "%INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json" /f >nul 2>&1
 
 if %errorLevel% equ 0 (
     echo     [OK] Firefox native host registered
@@ -205,9 +205,9 @@ echo   %INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.json
 echo   %INSTALL_DIR%\ee.aarepuusepp.eid_pd_reader.firefox.json
 echo.
 echo Registry entries created for:
-echo   - Chrome:  HKCU\Software\Google\Chrome\NativeMessagingHosts
-echo   - Edge:    HKCU\Software\Microsoft\Edge\NativeMessagingHosts
-echo   - Firefox: HKCU\Software\Mozilla\NativeMessagingHosts
+echo   - Chrome:  HKLM\Software\Google\Chrome\NativeMessagingHosts
+echo   - Edge:    HKLM\Software\Microsoft\Edge\NativeMessagingHosts
+echo   - Firefox: HKLM\Software\Mozilla\NativeMessagingHosts
 echo.
 echo ============================================================================
 echo Next Steps:

@@ -42,19 +42,19 @@ $manifestFirefox | ConvertTo-Json -Depth 10 | Set-Content $HOST_MANIFEST_FIREFOX
 Write-Host "`n=== Registering Native Host ===" -ForegroundColor Cyan
 
 # Register for Chrome
-$chromeKey = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\$HOSTNAME"
+$chromeKey = "HKLM:\Software\Google\Chrome\NativeMessagingHosts\$HOSTNAME"
 New-Item -Path $chromeKey -Force | Out-Null
 Set-ItemProperty -Path $chromeKey -Name "(default)" -Value $HOST_MANIFEST_CHROME -Type String
 Write-Host "[OK] Chrome:  $chromeKey" -ForegroundColor Green
 
 # Register for Edge
-$edgeKey = "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\$HOSTNAME"
+$edgeKey = "HKLM:\Software\Microsoft\Edge\NativeMessagingHosts\$HOSTNAME"
 New-Item -Path $edgeKey -Force | Out-Null
 Set-ItemProperty -Path $edgeKey -Name "(default)" -Value $HOST_MANIFEST_CHROME -Type String
 Write-Host "[OK] Edge:    $edgeKey" -ForegroundColor Green
 
 # Register for Firefox
-$firefoxKey = "HKCU:\Software\Mozilla\NativeMessagingHosts\$HOSTNAME"
+$firefoxKey = "HKLM:\Software\Mozilla\NativeMessagingHosts\$HOSTNAME"
 New-Item -Path $firefoxKey -Force | Out-Null
 Set-ItemProperty -Path $firefoxKey -Name "(default)" -Value $HOST_MANIFEST_FIREFOX -Type String
 Write-Host "[OK] Firefox: $firefoxKey" -ForegroundColor Green

@@ -52,7 +52,7 @@ REM ============================================================================
 echo [1/4] Removing Chrome registry entry...
 echo.
 
-reg delete "HKCU\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /f >nul 2>&1
+reg delete "HKLM\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /f >nul 2>&1
 
 if %errorLevel% equ 0 (
     echo     [OK] Chrome registry entry removed
@@ -66,7 +66,7 @@ REM ============================================================================
 echo [2/4] Removing Edge registry entry...
 echo.
 
-reg delete "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /f >nul 2>&1
+reg delete "HKLM\Software\Microsoft\Edge\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /f >nul 2>&1
 
 if %errorLevel% equ 0 (
     echo     [OK] Edge registry entry removed
@@ -80,7 +80,7 @@ REM ============================================================================
 echo [3/4] Removing Firefox registry entry...
 echo.
 
-reg delete "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /f >nul 2>&1
+reg delete "HKLM\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader" /f >nul 2>&1
 
 if %errorLevel% equ 0 (
     echo     [OK] Firefox registry entry removed

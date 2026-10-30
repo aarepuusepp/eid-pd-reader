@@ -206,6 +206,16 @@ The ACR1252 reader sometimes fails to power on the card on first attempt:
    progressive delays (1s, 2s, 3s). Default 3 attempts. Uses `UnpowerCard` disposition on disconnect
    to avoid additional POWER IOCTLs.
 
+### Pattern: Release build and installer
+- **eid-pd-installer** folder (`../eid-pd-installer/`): Central release collection point for all components
+- **Build script**: `eid-pd-installer/build-release.ps1` — builds reader, packages extensions, collects into `release/`
+- **Release output**: `eid-pd-installer/release/` — contains exe, manifests, install scripts, extension zips, signed .xpi
+- Supports `-SkipReader` and `-SkipExtension` flags for partial builds
+- Supports `-SignFirefox` flag with `-AmoApiKey`/`-AmoApiSecret` or `AMO_API_KEY`/`AMO_API_SECRET` env vars
+- Firefox signing uses `web-ext sign` (auto-installed via npm if missing), produces `esteid-pd-extension-firefox-signed.xpi`
+- Reader build uses Go (`C:\Program Files\Go\bin\go.exe` or PATH)
+- Extension packaging delegates to `eid-pd-extension/ops/package-extension.ps1` and `package-extension-firefox.ps1`
+
 ### Pattern: Project version locations
 - **libopenpace-go version**: README.md, CHANGELOG.md, go.mod (module version in tags)
 - **eid-pd-reader version**: `cmd/eid-pd-reader/main.go` const `Version`, README.md, go.mod dependency
@@ -216,9 +226,11 @@ The ACR1252 reader sometimes fails to power on the card on first attempt:
 ### Pattern: Native messaging host name and registry
 - **Current host name**: `ee.aarepuusepp.eid_pd_reader` (changed from `ee.aarepuusepp.eid_helper`)
 - **Reader manifest files**: `ee.aarepuusepp.eid_pd_reader.json` (Chrome/Edge), `ee.aarepuusepp.eid_pd_reader.firefox.json`
-- **Registry keys**: `HKCU\Software\{Google\Chrome|Microsoft\Edge|Mozilla}\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader`
+- **Registry keys**: `HKLM\Software\{Google\Chrome|Microsoft\Edge|Mozilla}\NativeMessagingHosts\ee.aarepuusepp.eid_pd_reader` (global, all users)
+- **Registry hive**: HKLM (HKEY_LOCAL_MACHINE) for machine-wide install (all users). Previously used HKCU (per-user only).
 - **Install dir**: `C:\Program Files\eid-pd-reader\`
 - **Extension ops scripts** (register-*.reg, setup-chrome-extension.ps1, etc.) must match the host name exactly
+- **setup-chrome-extension.ps1** checks HKLM first, falls back to HKCU for legacy installs
 
 ### Pattern: Native messaging commands (reader <-> extension)
 | Command | Request fields | Response |

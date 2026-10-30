@@ -43,7 +43,7 @@ Complete overview of browser support for the Estonian ID Card Personal Data Read
 **Native Host Registration:**
 ```batch
 # Windows
-reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
+reg add "HKLM\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
 ```
 
 **Documentation:** [EXTENSION-INSTALL.md#chrome--edge-installation](EXTENSION-INSTALL.md#chrome--edge-installation)
@@ -72,7 +72,7 @@ reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_hel
 **Native Host Registration:**
 ```batch
 # Windows (separate from Chrome)
-reg add "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
+reg add "HKLM\Software\Microsoft\Edge\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
 ```
 
 **Notes:**
@@ -115,7 +115,7 @@ reg add "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\ee.aarepuusepp.eid_he
 **Native Host Registration:**
 ```batch
 # Windows
-reg add "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.firefox.json" /f
+reg add "HKLM\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.firefox.json" /f
 ```
 
 **Build Command:**
@@ -171,7 +171,7 @@ reg add "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /
 **Native Host Registration:**
 ```batch
 # Windows (if different from Chrome)
-reg add "HKCU\Software\Opera Software\Opera\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
+reg add "HKLM\Software\Opera Software\Opera\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
 ```
 
 ---
@@ -192,7 +192,7 @@ reg add "HKCU\Software\Opera Software\Opera\NativeMessagingHosts\ee.aarepuusepp.
 **Native Host Registration:**
 ```batch
 # Windows
-reg add "HKCU\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
+reg add "HKLM\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
 ```
 
 ---
@@ -230,9 +230,9 @@ C:\Program Files\eid-pd-reader\eid-pd-reader.exe
 ```
 
 **Registry Locations:**
-- Chrome: `HKCU\Software\Google\Chrome\NativeMessagingHosts\`
-- Edge: `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\`
-- Firefox: `HKCU\Software\Mozilla\NativeMessagingHosts\`
+- Chrome: `HKLM\Software\Google\Chrome\NativeMessagingHosts\`
+- Edge: `HKLM\Software\Microsoft\Edge\NativeMessagingHosts\`
+- Firefox: `HKLM\Software\Mozilla\NativeMessagingHosts\`
 
 ### macOS
 

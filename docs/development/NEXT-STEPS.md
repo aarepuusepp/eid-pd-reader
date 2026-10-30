@@ -34,7 +34,7 @@ The extension needs to communicate with the native helper (`eid-pd-reader.exe`) 
 Run this command in PowerShell **as Administrator**:
 
 ```powershell
-reg add "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.firefox.json" /f
+reg add "HKLM\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.firefox.json" /f
 ```
 
 #### Verify Registration
@@ -42,12 +42,12 @@ reg add "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /
 Check if the registry entry was created:
 
 ```powershell
-reg query "HKCU\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper"
+reg query "HKLM\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper"
 ```
 
 Should show:
 ```
-HKEY_CURRENT_USER\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper
+HKEY_LOCAL_MACHINE\Software\Mozilla\NativeMessagingHosts\ee.aarepuusepp.eid_helper
     (Default)    REG_SZ    C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.firefox.json
 ```
 

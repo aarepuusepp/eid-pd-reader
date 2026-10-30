@@ -110,7 +110,7 @@ or
 2. **Windows registry:**
    ```powershell
    # Check registry entry exists
-   reg query "HKCU\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_helper"
+   reg query "HKLM\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_helper"
    
    # Re-run install script if missing
    .\ops\install-host.ps1

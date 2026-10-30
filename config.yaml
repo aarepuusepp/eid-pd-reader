@@ -80,3 +80,15 @@ advanced:
     # ef_given: "5002"
     # ef_code: "5006"
 
+# PKCS#11 defaults for personal CDOC decryption.
+# PIN1 is never stored here; it must be supplied per decrypt request.
+pkcs11:
+  # Windows examples:
+  # library_path: "C:\\Windows\\System32\\opensc-pkcs11.dll"
+  # library_path: "C:\\Program Files\\OpenSC Project\\OpenSC\\pkcs11\\opensc-pkcs11.dll"
+  library_path: ""
+  slot: 0
+  # Optional private key / certificate filters. Leave empty to use first match.
+  label: ""
+  key_id_hex: ""
+

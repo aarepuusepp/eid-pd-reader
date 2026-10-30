@@ -269,10 +269,10 @@ if (window.EstEID_PD && window.EstEID_PD.version === '1.0.1') {
 **Update registry keys (Windows):**
 ```powershell
 # Remove old
-reg delete "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.example.eid_helper" /f
+reg delete "HKLM\Software\Google\Chrome\NativeMessagingHosts\com.example.eid_helper" /f
 
 # Add new
-reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
+reg add "HKLM\Software\Google\Chrome\NativeMessagingHosts\ee.aarepuusepp.eid_helper" /ve /t REG_SZ /d "C:\Program Files\eid-pd-reader\ee.aarepuusepp.eid_helper.json" /f
 ```
 
 ---
