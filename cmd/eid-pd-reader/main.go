@@ -399,18 +399,18 @@ func main() {
 			p11Cfg, err := esteid.ResolvePKCS11Config(
 				cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex,
 				req.PKCS11.LibraryPath, req.PKCS11.Slot, req.PKCS11.Label, req.PKCS11.KeyIDHex,
-				req.PIN, true,
+				req.PIN, false,
 			)
 			if err != nil {
 				_ = writeNativeMessage(map[string]interface{}{
-					"ok": false, "error": err.Error(), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+					"ok": false, "error": err.Error(), "errorCode": esteid.PINErrorCode(err), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
 				})
 				continue
 			}
-			result, err := esteid.UnwrapTransportKey(p11Cfg, req.Challenge, req.Certificate)
+			result, err := esteid.UnwrapTransportKey(p11Cfg, req.Challenge, req.Certificate, req.Origin)
 			if err != nil {
 				_ = writeNativeMessage(map[string]interface{}{
-					"ok": false, "error": err.Error(), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
+					"ok": false, "error": err.Error(), "errorCode": esteid.PINErrorCode(err), "timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
 				})
 				continue
 			}
@@ -422,7 +422,7 @@ func main() {
 		case "decryptContainer":
 			resolved, resolveErr := esteid.ResolvePKCS11Config(cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex, "", nil, "", "", "", true)
 			if resolveErr != nil {
-				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": resolveErr.Error()})
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": resolveErr.Error(), "errorCode": esteid.PINErrorCode(resolveErr)})
 				continue
 			}
 			req.PIN = resolved.PIN

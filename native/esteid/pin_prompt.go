@@ -2,6 +2,8 @@ package esteid
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,10 +13,31 @@ import (
 	"time"
 )
 
+var ErrPINTimeout = errors.New("PIN entry timed out after 60 seconds")
+
+// PINContext is sent only over stdin to the installed native dialog.
+type PINContext struct {
+	FileName     string `json:"fileName"`
+	Name         string `json:"name"`
+	PersonalCode string `json:"personalCode"`
+	Origin       string `json:"origin"`
+}
+
+func PINErrorCode(err error) string {
+	if errors.Is(err, ErrPINTimeout) {
+		return "ERR_EIDPD_PIN_TIMEOUT"
+	}
+	return ""
+}
+
 // PromptPIN1 shows a native PIN1 dialog or secure console prompt.
 func PromptPIN1(title string) (string, error) {
+	return promptPIN1WithContext(title, PINContext{})
+}
+
+func promptPIN1WithContext(title string, details PINContext) (string, error) {
 	if runtime.GOOS == "windows" {
-		return promptPINWindows()
+		return promptPINWindows(details)
 	}
 	if pin, err := promptPINPinentry(title); err == nil && pin != "" {
 		return pin, nil
@@ -22,7 +45,7 @@ func PromptPIN1(title string) (string, error) {
 	return promptPINConsole(title)
 }
 
-func promptPINWindows() (string, error) {
+func promptPINWindows(details PINContext) (string, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("cannot locate EID-PD installation")
@@ -33,14 +56,25 @@ func promptPINWindows() (string, error) {
 	if _, err := os.Stat(helper); err != nil {
 		return "", fmt.Errorf("PIN dialog is missing; repair the EID-PD installation")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// The UI enforces 60 seconds from Loaded using a monotonic clock. This
+	// watchdog additionally covers startup or a stalled UI process.
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, helper).Output()
+	metadata, err := json.Marshal(details)
+	if err != nil {
+		return "", fmt.Errorf("cannot prepare PIN dialog")
+	}
+	cmd := exec.CommandContext(ctx, helper)
+	cmd.Stdin = strings.NewReader(string(metadata))
+	out, err := cmd.Output()
 	defer clear(out)
 	if ctx.Err() != nil {
-		return "", fmt.Errorf("PIN entry timed out")
+		return "", ErrPINTimeout
 	}
 	if err != nil {
+		if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() == 3 {
+			return "", ErrPINTimeout
+		}
 		if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() == 2 {
 			return "", fmt.Errorf("PIN entry cancelled")
 		}

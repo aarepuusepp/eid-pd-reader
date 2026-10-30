@@ -1,6 +1,8 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Text;
+using System.Text.Json;
 
 namespace EidPd.PinPrompt;
 
@@ -8,6 +10,7 @@ internal static class Program
 {
     internal static bool Preview { get; private set; }
     internal static bool Check { get; private set; }
+    internal static PromptContext Context { get; private set; } = new();
 
     [STAThread]
     private static int Main(string[] args)
@@ -19,6 +22,20 @@ internal static class Program
         Environment.ExitCode = 2;
         try
         {
+            if (Preview)
+                Context = new() { FileName = "Näidisdokument.cdoc", Name = "Mari Näidis", PersonalCode = "00000000000", Origin = "https://digisign.example" };
+            else if (!Check)
+            {
+                Console.InputEncoding = Encoding.UTF8;
+                // Metadata travels through the reader's inherited stdin pipe,
+                // never command-line arguments, files or browser-owned identity.
+                var buffer = new char[8193];
+                var count = Console.In.ReadBlock(buffer, 0, buffer.Length);
+                if (count == buffer.Length) return 1;
+                Context = JsonSerializer.Deserialize<PromptContext>(buffer.AsSpan(0, count),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                Array.Clear(buffer);
+            }
             WinRT.ComWrappersSupport.InitializeComWrappers();
             Application.Start(parameters =>
             {
@@ -34,6 +51,14 @@ internal static class Program
         }
         return Environment.ExitCode;
     }
+}
+
+internal sealed class PromptContext
+{
+    public string FileName { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string PersonalCode { get; set; } = "";
+    public string Origin { get; set; } = "";
 }
 
 public sealed partial class PinApplication : Application

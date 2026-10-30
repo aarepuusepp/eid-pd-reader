@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Diagnostics;
 using Windows.Graphics;
 using Windows.System;
 
@@ -17,6 +18,11 @@ internal sealed class PinWindow : Window
     private readonly PasswordBox input;
     private readonly Button confirm;
     private bool submitted;
+    private readonly Stopwatch elapsed = new();
+    private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+    private readonly ProgressBar remainingBar = new() { Minimum = 0, Maximum = 60, Value = 60, Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly TextBlock remainingLabel = new() { Text = "PIN1 kinnitamiseks on aega 60 sekundit", FontSize = 14 };
+    private bool countdownStarted;
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(nint hwnd);
@@ -26,8 +32,8 @@ internal sealed class PinWindow : Window
         Title = Program.Preview ? "EID-PD · Kujunduse eelvaade" : "EID-PD · PIN1";
         SystemBackdrop = new MicaBackdrop();
 
-        var root = new Grid { Padding = new Thickness(28), RowSpacing = 20 };
-        for (var i = 0; i < 4; i++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var root = new Grid { Padding = new Thickness(28), RowSpacing = 16 };
+        for (var i = 0; i < 6; i++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         heading.Children.Add(new FontIcon { Glyph = "\uE72E", FontSize = 24, VerticalAlignment = VerticalAlignment.Center });
@@ -47,6 +53,26 @@ internal sealed class PinWindow : Window
         };
         Grid.SetRow(description, 1);
         root.Children.Add(description);
+
+        var details = new StackPanel { Spacing = 5 };
+        details.Children.Add(new TextBlock { Text = "Fail · veebirakenduse esitatud nimi", FontSize = 13 });
+        details.Children.Add(new TextBlock
+        {
+            Text = string.IsNullOrWhiteSpace(Program.Context.FileName) ? "Failinime ei edastatud" : Program.Context.FileName,
+            FontSize = 16, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        details.Children.Add(new TextBlock { Text = "Dekrüpteerija · ID-kaardi sertifikaadilt", FontSize = 13, Margin = new Thickness(0, 7, 0, 0) });
+        details.Children.Add(new TextBlock
+        {
+            Text = string.IsNullOrWhiteSpace(Program.Context.Name) ? "Isikuandmeid ei edastatud" : Program.Context.Name,
+            FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        details.Children.Add(new TextBlock { Text = Program.Context.PersonalCode, FontSize = 16 });
+        if (!string.IsNullOrWhiteSpace(Program.Context.Origin))
+            details.Children.Add(new TextBlock { Text = Program.Context.Origin, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
+        Grid.SetRow(details, 2);
+        root.Children.Add(details);
 
         var field = new StackPanel { Spacing = 10 };
         input = new PasswordBox
@@ -72,8 +98,15 @@ internal sealed class PinWindow : Window
             FontSize = 14, TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
         });
-        Grid.SetRow(field, 2);
+        Grid.SetRow(field, 3);
         root.Children.Add(field);
+
+        var countdown = new StackPanel { Spacing = 8 };
+        countdown.Children.Add(remainingLabel);
+        countdown.Children.Add(remainingBar);
+        AutomationProperties.SetName(remainingBar, "PIN1 sisestamiseks jäänud aeg");
+        Grid.SetRow(countdown, 4);
+        root.Children.Add(countdown);
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 12, Margin = new Thickness(0, 4, 0, 0) };
         var cancel = new Button { Content = "Tühista", MinWidth = 112, Height = 40, FontSize = 16, TabIndex = 1 };
@@ -88,14 +121,24 @@ internal sealed class PinWindow : Window
         input.PasswordChanged += (_, _) => confirm.IsEnabled = input.Password.Length > 0;
         actions.Children.Add(cancel);
         actions.Children.Add(confirm);
-        Grid.SetRow(actions, 3);
+        Grid.SetRow(actions, 5);
         root.Children.Add(actions);
         root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, e) =>
         {
             if (e.Key == VirtualKey.Escape) { e.Handled = true; Close(); }
         }), true);
-        root.Loaded += (_, _) => input.Focus(FocusState.Programmatic);
-        Closed += (_, _) => input.Password = "";
+        timer.Tick += (_, _) => UpdateCountdown();
+        root.Loaded += (_, _) =>
+        {
+            input.Focus(FocusState.Programmatic);
+            if (!countdownStarted && !Program.Check)
+            {
+                countdownStarted = true;
+                elapsed.Start();
+                timer.Start();
+            }
+        };
+        Closed += (_, _) => { submitted = true; timer.Stop(); elapsed.Stop(); input.Password = ""; };
         Content = root;
 
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -107,7 +150,7 @@ internal sealed class PinWindow : Window
             presenter.IsMinimizable = false;
         }
         var scale = GetDpiForWindow(hwnd) / 96.0;
-        appWindow.ResizeClient(new SizeInt32((int)(460 * scale), (int)(340 * scale)));
+        appWindow.ResizeClient(new SizeInt32((int)(520 * scale), (int)(560 * scale)));
         var display = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest);
         var area = display.WorkArea;
         appWindow.Move(new PointInt32(area.X + (area.Width - appWindow.Size.Width) / 2,
@@ -116,6 +159,9 @@ internal sealed class PinWindow : Window
 
     private void Submit()
     {
+        // Check the monotonic deadline on submit too, so delayed UI timer ticks
+        // cannot accept a PIN after expiry.
+        UpdateCountdown();
         if (submitted || input.Password.Length == 0) return;
         submitted = true;
         if (!Program.Preview)
@@ -133,6 +179,20 @@ internal sealed class PinWindow : Window
         }
         input.Password = "";
         Environment.ExitCode = 0;
+        Close();
+    }
+
+    private void UpdateCountdown()
+    {
+        if (submitted || !countdownStarted) return;
+        var remaining = Math.Max(0, 60 - elapsed.Elapsed.TotalSeconds);
+        remainingBar.Value = remaining;
+        remainingLabel.Text = $"PIN1 kinnitamiseks on aega {(int)Math.Ceiling(remaining)} sekundit";
+        if (remaining > 0) return;
+        submitted = true;
+        confirm.IsEnabled = false;
+        input.Password = "";
+        Environment.ExitCode = 3;
         Close();
     }
 }
