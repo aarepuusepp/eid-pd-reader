@@ -62,6 +62,10 @@ if "%EXE_PATH%"=="" (
 )
 
 echo     [OK] Found: %EXE_PATH%
+if not exist "%SCRIPT_DIR%\pin-ui\EidPd.PinPrompt.exe" (
+    echo ERROR: WinUI PIN dialog is missing. Use the complete NSIS installer package.
+    exit /b 1
+)
 echo.
 
 REM ============================================================================
@@ -99,6 +103,8 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 echo     [OK] Copied: eid-pd-reader.exe
+xcopy /E /I /Y "%SCRIPT_DIR%\pin-ui" "%INSTALL_DIR%\pin-ui" >nul
+if errorlevel 1 exit /b 1
 
 REM Find and copy Chrome/Edge host manifest (check build folder first, then host-manifests)
 set CHROME_MANIFEST=

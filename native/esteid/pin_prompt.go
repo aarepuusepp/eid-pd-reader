@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -13,13 +14,7 @@ import (
 // PromptPIN1 shows a native PIN1 dialog or secure console prompt.
 func PromptPIN1(title string) (string, error) {
 	if runtime.GOOS == "windows" {
-		if pin := promptPINWindows(title); pin != "" {
-			return pin, nil
-		}
-		return "", fmt.Errorf("PIN entry cancelled")
-	}
-	if pin := promptPINWindows(title); pin != "" {
-		return pin, nil
+		return promptPINWindows()
 	}
 	if pin, err := promptPINPinentry(title); err == nil && pin != "" {
 		return pin, nil
@@ -27,21 +22,35 @@ func PromptPIN1(title string) (string, error) {
 	return promptPINConsole(title)
 }
 
-func promptPINWindows(title string) string {
-	if runtime.GOOS != "windows" {
-		return ""
+func promptPINWindows() (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("cannot locate EID-PD installation")
 	}
-	script := fmt.Sprintf(
-		`Add-Type -AssemblyName System.Windows.Forms; $form = New-Object System.Windows.Forms.Form; $form.Text = '%s'; $form.Size = New-Object System.Drawing.Size(360,160); $form.StartPosition = 'CenterScreen'; $label = New-Object System.Windows.Forms.Label; $label.Text = 'Enter ID-card PIN1:'; $label.AutoSize = $true; $label.Location = New-Object System.Drawing.Point(10,20); $form.Controls.Add($label); $box = New-Object System.Windows.Forms.TextBox; $box.UseSystemPasswordChar = $true; $box.Location = New-Object System.Drawing.Point(10,50); $box.Size = New-Object System.Drawing.Size(320,20); $form.Controls.Add($box); $ok = New-Object System.Windows.Forms.Button; $ok.Text = 'OK'; $ok.Location = New-Object System.Drawing.Point(250,85); $ok.Add_Click({$form.Tag = $box.Text; $form.Close()}); $form.Controls.Add($ok); $form.Add_Shown({$box.Focus()}); [void]$form.ShowDialog(); if ($form.Tag) { Write-Output $form.Tag }`,
-		strings.ReplaceAll(title, "'", "''"),
-	)
+	// Resolve only next to the installed reader, never through PATH or the
+	// current directory. The installer protects this directory under Program Files.
+	helper := filepath.Join(filepath.Dir(executable), "pin-ui", "EidPd.PinPrompt.exe")
+	if _, err := os.Stat(helper); err != nil {
+		return "", fmt.Errorf("PIN dialog is missing; repair the EID-PD installation")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-STA", "-Command", script).Output()
-	if err != nil {
-		return ""
+	out, err := exec.CommandContext(ctx, helper).Output()
+	defer clear(out)
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("PIN entry timed out")
 	}
-	return strings.TrimSpace(string(out))
+	if err != nil {
+		if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() == 2 {
+			return "", fmt.Errorf("PIN entry cancelled")
+		}
+		return "", fmt.Errorf("PIN dialog failed; repair the EID-PD installation")
+	}
+	pin := strings.TrimSpace(string(out))
+	if pin == "" {
+		return "", fmt.Errorf("PIN entry cancelled")
+	}
+	return pin, nil
 }
 
 func promptPINPinentry(title string) (string, error) {
