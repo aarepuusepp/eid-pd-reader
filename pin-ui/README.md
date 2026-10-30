@@ -8,6 +8,9 @@ The dialog opens centered in the work area of the display containing the mouse
 cursor at window creation. It moves to that display before sizing for its DPI,
 supports negative desktop coordinates, and does not follow subsequent mouse
 movement. If the cursor query fails, it uses the window's nearest display.
+Placement uses Win32 `MONITORINFO.rcWork` absolute desktop coordinates directly,
+without adding another display offset. The outer window is capped to the work
+area; the content scrolls if a small display cannot fit the full dialog.
 
 Build with .NET 10 SDK on Windows x64:
 
@@ -35,6 +38,9 @@ labelled, does not access a card and never writes entered text to stdout. Use
 dummy input only. Real PIN entry remains a manual hardware acceptance test.
 `--check` constructs the window without displaying it or reading a PIN; the
 build and installer use it to reject incomplete runtime/resource payloads.
+It also positions the hidden window on every attached monitor and checks its
+actual Win32 rectangle for full containment and centering. Only geometry is
+printed in this check mode; it never accesses a card or PIN.
 
 The reader sends bounded JSON context over stdin. The filename in
 `challenge.displayContext.fileName` is explicitly labelled as application-supplied.

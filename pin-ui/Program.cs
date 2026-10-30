@@ -70,6 +70,7 @@ public sealed partial class PinApplication : Application
         InitializeComponent();
         UnhandledException += (_, e) =>
         {
+            if (Program.Check) Console.Error.WriteLine(e.Exception.Message);
             e.Handled = true;
             Environment.ExitCode = 1;
             Exit();

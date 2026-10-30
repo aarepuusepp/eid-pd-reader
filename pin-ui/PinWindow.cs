@@ -31,6 +31,34 @@ internal sealed class PinWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out PointInt32 point);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public uint Size;
+        public NativeRect Monitor, Work;
+        public uint Flags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromPoint(PointInt32 point, uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint hwnd, out NativeRect rect);
+
+    private delegate bool MonitorCallback(nint monitor, nint dc, nint rect, nint data);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumDisplayMonitors(nint dc, nint clip, MonitorCallback callback, nint data);
+
     public PinWindow()
     {
         Title = Program.Preview ? "EID-PD · Kujunduse eelvaade" : "EID-PD · PIN1";
@@ -143,7 +171,12 @@ internal sealed class PinWindow : Window
             }
         };
         Closed += (_, _) => { submitted = true; timer.Stop(); elapsed.Stop(); input.Password = ""; };
-        Content = root;
+        Content = new ScrollViewer
+        {
+            Content = root,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+        };
 
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(hwnd));
@@ -155,20 +188,50 @@ internal sealed class PinWindow : Window
         }
         // Choose once, before showing the window: later mouse movement must not
         // move an active PIN dialog. Fall back if the cursor cannot be queried.
-        var display = GetCursorPos(out var cursor)
-            ? DisplayArea.GetFromPoint(cursor, DisplayAreaFallback.Nearest)
-            : DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest);
-        var area = display.WorkArea;
-        // WorkArea offsets are relative to OuterBounds, not desktop coordinates.
-        var left = display.OuterBounds.X + area.X;
-        var top = display.OuterBounds.Y + area.Y;
+        var point = GetCursorPos(out var cursor) ? cursor : appWindow.Position;
+        PlaceOnMonitor(appWindow, hwnd, MonitorFromPoint(point, 2));
+
+        if (Program.Check)
+        {
+            // Exercise the real Windows geometry on EVERY attached monitor.
+            // No window is shown and no card or PIN is accessed in this mode.
+            var monitors = new List<nint>();
+            if (!EnumDisplayMonitors(0, 0, (monitor, _, _, _) => { monitors.Add(monitor); return true; }, 0))
+                throw new InvalidOperationException("Cannot enumerate monitors");
+            foreach (var monitor in monitors) PlaceOnMonitor(appWindow, hwnd, monitor);
+        }
+    }
+
+    private static void PlaceOnMonitor(AppWindow appWindow, nint hwnd, nint monitor)
+    {
+        var info = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info)) throw new InvalidOperationException("Cannot query monitor work area");
+        // MONITORINFO.rcWork is already in absolute virtual-desktop coordinates.
+        // Never add a display origin to these coordinates (including negatives).
+        var area = info.Work;
+        var width = area.Right - area.Left;
+        var height = area.Bottom - area.Top;
+        if (width <= 0 || height <= 0) throw new InvalidOperationException("Invalid monitor work area");
         // First move the hidden window to its target display so PerMonitorV2
         // applies that display's DPI before calculating the client size.
-        appWindow.Move(new PointInt32(left, top));
+        appWindow.Move(new PointInt32(area.Left, area.Top));
         var scale = GetDpiForWindow(hwnd) / 96.0;
         appWindow.ResizeClient(new SizeInt32((int)(520 * scale), (int)(560 * scale)));
-        appWindow.Move(new PointInt32(left + Math.Max(0, (area.Width - appWindow.Size.Width) / 2),
-            top + Math.Max(0, (area.Height - appWindow.Size.Height) / 2)));
+        appWindow.Resize(new SizeInt32(Math.Min(width, appWindow.Size.Width), Math.Min(height, appWindow.Size.Height)));
+        appWindow.Move(new PointInt32(area.Left + (width - appWindow.Size.Width) / 2,
+            area.Top + (height - appWindow.Size.Height) / 2));
+
+        if (Program.Check)
+        {
+            var found = GetWindowRect(hwnd, out var actual);
+            Console.WriteLine($"CHECK placement work=({area.Left},{area.Top},{area.Right},{area.Bottom}) window=({actual.Left},{actual.Top},{actual.Right},{actual.Bottom})");
+            if (!found || actual.Left < area.Left || actual.Top < area.Top ||
+                actual.Right > area.Right || actual.Bottom > area.Bottom ||
+                Math.Abs((actual.Left + actual.Right) - (area.Left + area.Right)) > 2 ||
+                Math.Abs((actual.Top + actual.Bottom) - (area.Top + area.Bottom)) > 2)
+                throw new InvalidOperationException("PIN window is not centered within the monitor work area");
+            Console.WriteLine("PASS placement");
+        }
     }
 
     private void Submit()
