@@ -27,6 +27,10 @@ internal sealed class PinWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(nint hwnd);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out PointInt32 point);
+
     public PinWindow()
     {
         Title = Program.Preview ? "EID-PD · Kujunduse eelvaade" : "EID-PD · PIN1";
@@ -149,12 +153,22 @@ internal sealed class PinWindow : Window
             presenter.IsMaximizable = false;
             presenter.IsMinimizable = false;
         }
+        // Choose once, before showing the window: later mouse movement must not
+        // move an active PIN dialog. Fall back if the cursor cannot be queried.
+        var display = GetCursorPos(out var cursor)
+            ? DisplayArea.GetFromPoint(cursor, DisplayAreaFallback.Nearest)
+            : DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest);
+        var area = display.WorkArea;
+        // WorkArea offsets are relative to OuterBounds, not desktop coordinates.
+        var left = display.OuterBounds.X + area.X;
+        var top = display.OuterBounds.Y + area.Y;
+        // First move the hidden window to its target display so PerMonitorV2
+        // applies that display's DPI before calculating the client size.
+        appWindow.Move(new PointInt32(left, top));
         var scale = GetDpiForWindow(hwnd) / 96.0;
         appWindow.ResizeClient(new SizeInt32((int)(520 * scale), (int)(560 * scale)));
-        var display = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest);
-        var area = display.WorkArea;
-        appWindow.Move(new PointInt32(area.X + (area.Width - appWindow.Size.Width) / 2,
-            area.Y + (area.Height - appWindow.Size.Height) / 2));
+        appWindow.Move(new PointInt32(left + Math.Max(0, (area.Width - appWindow.Size.Width) / 2),
+            top + Math.Max(0, (area.Height - appWindow.Size.Height) / 2)));
     }
 
     private void Submit()

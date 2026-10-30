@@ -4,6 +4,11 @@ Native WinUI 3 controls, system theme and DPI scaling. The masked input is 184
 effective pixels wide with 24-pixel text. Enter confirms; Escape, Cancel and
 the window close button cancel. Empty input cannot be submitted.
 
+The dialog opens centered in the work area of the display containing the mouse
+cursor at window creation. It moves to that display before sizing for its DPI,
+supports negative desktop coordinates, and does not follow subsequent mouse
+movement. If the cursor query fails, it uses the window's nearest display.
+
 Build with .NET 10 SDK on Windows x64:
 
 ```powershell
