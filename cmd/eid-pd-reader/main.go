@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -373,7 +374,7 @@ func main() {
 			p11Cfg, err := esteid.ResolvePKCS11Config(
 				cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex,
 				req.PKCS11.LibraryPath, req.PKCS11.Slot, req.PKCS11.Label, req.PKCS11.KeyIDHex,
-				req.PIN, true,
+				"", false,
 			)
 			if err != nil {
 				_ = writeNativeMessage(map[string]interface{}{
@@ -540,7 +541,7 @@ func printUsage() {
 // --- Native messaging framing (4-byte little endian length) ---
 func readNativeMessage(r *bufio.Reader) ([]byte, error) {
 	lenBuf := make([]byte, 4)
-	if _, err := r.Read(lenBuf); err != nil {
+	if _, err := io.ReadFull(r, lenBuf); err != nil {
 		return nil, err
 	}
 	length := int(uint32(lenBuf[0]) | uint32(lenBuf[1])<<8 | uint32(lenBuf[2])<<16 | uint32(lenBuf[3])<<24)
@@ -548,7 +549,7 @@ func readNativeMessage(r *bufio.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("invalid message length: %d", length)
 	}
 	payload := make([]byte, length)
-	if _, err := r.Read(payload); err != nil {
+	if _, err := io.ReadFull(r, payload); err != nil {
 		return nil, err
 	}
 	return payload, nil

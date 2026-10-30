@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aarepuusepp/libcdoc-go/v2/cdoc"
 	"github.com/aarepuusepp/libcdoc-go/v2/key"
 )
 
@@ -31,6 +30,7 @@ type PKCS11RuntimeConfig struct {
 }
 
 // ResolvePKCS11Config merges request overrides with application defaults.
+// Public certificate reads pass false and do not require a PIN.
 func ResolvePKCS11Config(defaultLibrary string, defaultSlot int, defaultLabel, defaultKeyIDHex string, overrideLibrary string, overrideSlot *int, overrideLabel, overrideKeyIDHex, pin string, promptIfMissingPIN bool) (PKCS11RuntimeConfig, error) {
 	cfg := PKCS11RuntimeConfig{
 		LibraryPath: strings.TrimSpace(defaultLibrary),
@@ -67,10 +67,7 @@ func ResolvePKCS11Config(defaultLibrary string, defaultSlot int, defaultLabel, d
 		}
 		cfg.PIN = entered
 	}
-	if cfg.LibraryPath == "" {
-		return PKCS11RuntimeConfig{}, fmt.Errorf("pkcs11 library path is not configured")
-	}
-	if cfg.PIN == "" {
+	if cfg.PIN == "" && promptIfMissingPIN {
 		return PKCS11RuntimeConfig{}, fmt.Errorf("pin is required")
 	}
 	return cfg, nil
@@ -107,13 +104,7 @@ func GetDecryptCertificate(cfg PKCS11RuntimeConfig) (*DecryptCertificateResult, 
 	if err != nil {
 		return nil, err
 	}
-	token, err := cdoc.NewPKCS11Token(p11)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = token.Close() }()
-
-	cert, err := token.GetCertificate()
+	cert, err := readPublicCertificate(p11)
 	if err != nil {
 		return nil, err
 	}
