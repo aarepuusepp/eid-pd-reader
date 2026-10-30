@@ -1,8 +1,17 @@
 # libopenpace-go source snapshot
 
 Source: https://bitbucket.org/aarepuusepp/libopenpace-go
-Commit: b48776f211acd4de71835a09f16daa500c2c9a24
+Mirror / Go module path: https://github.com/aarepuusepp/libopenpace-go
+Version: v1.1.2
+Commit: 736dfdea5e501deee953eac5bc0b8419e4c3c7c6
 
-This copy provides the reader with the exact 1.1.1 source until that version is
-available at the module path github.com/aarepuusepp/libopenpace-go. It includes
-its original LICENSE. Update the snapshot and this revision together.
+Pinned module sources (apdu, asn1, crypto, kdf, pace, sm), tests, reference
+fixtures, module files, license and release documentation. The examples and
+repository tooling are not copied. There are no reader-specific source patches.
+
+This snapshot makes the reader build independent of a sibling checkout or
+module-proxy publication delay. Update the module requirement, source files,
+fixtures and this revision together. The original LICENSE is retained.
+
+Run go test ./... inside this directory as well as at the reader root:
+Go deliberately excludes nested modules from the root test pattern.
