@@ -3,7 +3,7 @@ module ee.aarepuusepp.eid-pd-reader
 go 1.27.3
 
 require (
-	github.com/aarepuusepp/libcdoc-go/v2 v2.0.5
+	github.com/aarepuusepp/libcdoc-go/v2 v2.0.6
 	github.com/aarepuusepp/libopenpace-go v1.1.1
 	github.com/ebfe/scard v0.0.0-20241214075232-7af069cabc25
 	github.com/miekg/pkcs11 v1.1.2
