@@ -2,7 +2,7 @@
 
 Native helper application for reading personal data from Estonian ID cards.
 
-Current source version: **2.1.6**; see [release notes](RELEASE-2.1.6.md).
+Current source version: **2.1.9**; see [release notes](RELEASE-2.1.9.md).
 
 NFC certificate reading and CDOC decryption are available in the development
 build; see [supported profiles and manual acceptance](docs/NFC-CRYPTO.md).
@@ -320,3 +320,5 @@ The PACE implementation supports:
 
 See [libopenpace-go](../libopenpace-go/) for more details on the PACE implementation.
 
+
+The workstation package and reader share the same release version. Browser extensions are versioned independently because they are also distributed through browser stores.

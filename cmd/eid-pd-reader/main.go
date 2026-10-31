@@ -19,7 +19,7 @@ import (
 
 // Version information
 const (
-	Version = "2.1.6"
+	Version = "2.1.9"
 	AppName = "eid-pd-reader"
 )
 
