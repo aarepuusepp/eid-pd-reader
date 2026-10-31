@@ -1,5 +1,7 @@
 github.com/aarepuusepp/libcdoc-go/v2 v2.0.6 h1:UkAzSMQGzVCwgxPcxC5squHLkYe1YuHIOohunJ1Bs+s=
 github.com/aarepuusepp/libcdoc-go/v2 v2.0.6/go.mod h1:pdZYWnT11MuOwimcP+POyzgGf2y35eXjs+CN95izMh4=
+github.com/aarepuusepp/libcdoc-go/v2 v2.0.7 h1:ZKVJ+msj3pOdBbwx+3pNC1g1ZWQ4X88Cz578t1KrxV4=
+github.com/aarepuusepp/libcdoc-go/v2 v2.0.7/go.mod h1:pdZYWnT11MuOwimcP+POyzgGf2y35eXjs+CN95izMh4=
 github.com/bwesterb/go-ristretto v1.2.3/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7NFEuV9ekS419A0=
 github.com/cloudflare/circl v1.3.6/go.mod h1:5XYMA4rFBvNIrhs50XuiBJ15vF2pZn4nnUKZrLbUZFA=
 github.com/ebfe/scard v0.0.0-20241214075232-7af069cabc25 h1:vXmXuiy1tgifTqWAAaU+ESu1goRp4B3fdhemWMMrS4g=
