@@ -18,6 +18,9 @@ type DecryptCertificateResult struct {
 	CertificatePEM    string   `json:"certificatePem"`
 	ThumbprintSHA256  string   `json:"thumbprintSha256"`
 	SupportedKeyTypes []string `json:"supportedKeyTypes"`
+	CommonName        string   `json:"commonName"`
+	SubjectSerial     string   `json:"subjectSerial"`
+	SerialNumber      string   `json:"serialNumber"`
 }
 
 // PKCS11RuntimeConfig holds resolved PKCS#11 settings for decrypt operations.
@@ -126,5 +129,8 @@ func certificateResultFromX509(cert *x509.Certificate) (*DecryptCertificateResul
 		CertificatePEM:    string(pemBytes),
 		ThumbprintSHA256:  hex.EncodeToString(sum[:]),
 		SupportedKeyTypes: keyTypes,
+		CommonName:        cert.Subject.CommonName,
+		SubjectSerial:     strings.TrimPrefix(cert.Subject.SerialNumber, "PNOEE-"),
+		SerialNumber:      fmt.Sprintf("%X", cert.SerialNumber),
 	}, nil
 }

@@ -2,7 +2,10 @@
 
 Native helper application for reading personal data from Estonian ID cards.
 
-Current source version: **2.1.4**; see [release notes](RELEASE-2.1.4.md).
+Current source version: **2.1.5**; see [release notes](RELEASE-2.1.5.md).
+
+NFC certificate reading and CDOC decryption are available in the development
+build; see [supported profiles and manual acceptance](docs/NFC-CRYPTO.md).
 
 ## Overview
 
@@ -21,7 +24,7 @@ The eid-pd-reader is a Go-based native application that communicates with PC/SC 
 
 `libcdoc-go/v2 v2.0.6` is a published Go module and is downloaded using `go.sum`.
 No sibling `libcdoc-go` checkout or Go workspace is needed. The pinned
-`libopenpace-go v1.1.2` source remains in `third_party/libopenpace-go` with provenance
+`libopenpace-go v1.1.3` source remains in `third_party/libopenpace-go` with provenance
 and its original license. Build with `GOWORK=off` to avoid local workspace overrides.
 
 ## Installation

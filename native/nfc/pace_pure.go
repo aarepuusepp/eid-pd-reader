@@ -35,7 +35,7 @@ func StartPACE(card *scard.Card, can string) (SM, error) {
 	// protocol (AES-128/192/256) and curve (P-256, brainpool, etc.)
 	// We pass default values here, but PerformPACE will override them
 	// based on what the card advertises in CardAccess
-	logVerbose("[PACE] Starting PACE protocol with CAN: %s\n", can)
+	logVerbose("[PACE] Starting PACE protocol\n")
 
 	// Defaults for IDEMIA cards (ECDH-GM-AES256 + secp256r1).
 	// PerformPACE reads EF.CardAccess and overrides with the actual values.
@@ -50,8 +50,7 @@ func StartPACE(card *scard.Card, can string) (SM, error) {
 		return nil, fmt.Errorf("PACE establishment failed: %w", err)
 	}
 
-	logVerbose("[PACE] Success! K_enc=%X K_mac=%X SSC0=%X\n",
-		smCtx.EncryptionKey, smCtx.MACKey, smCtx.SSC)
+	logVerbose("[PACE] Secure messaging established\n")
 
 	// Wrap the SM context in our adapter
 	return NewSMPureGo(card, smCtx), nil

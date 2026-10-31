@@ -2,7 +2,7 @@ package nfc
 
 import (
 	"fmt"
-	
+
 	"github.com/aarepuusepp/libopenpace-go/sm"
 	"github.com/ebfe/scard"
 )
@@ -26,19 +26,19 @@ func (s *smPureGo) Transmit(apdu []byte) (data []byte, sw uint16, err error) {
 	if len(apdu) < 4 {
 		return nil, 0, fmt.Errorf("APDU too short: %d bytes", len(apdu))
 	}
-	
+
 	// Log plain APDU
-	logVerbose("[APDU] Plain: %X\n", apdu)
-	
+	logVerbose("[APDU] Header: %X, bytes: %d\n", apdu[:4], len(apdu))
+
 	// Parse APDU components
 	cla := apdu[0]
 	ins := apdu[1]
 	p1 := apdu[2]
 	p2 := apdu[3]
-	
+
 	var cmdData []byte
 	var le int
-	
+
 	// Parse Lc and data
 	if len(apdu) > 4 {
 		if len(apdu) == 5 {
@@ -52,7 +52,7 @@ func (s *smPureGo) Transmit(apdu []byte) (data []byte, sw uint16, err error) {
 			lc := int(apdu[4])
 			if len(apdu) >= 5+lc {
 				cmdData = apdu[5 : 5+lc]
-				
+
 				// Check for Le
 				if len(apdu) == 5+lc+1 {
 					le = int(apdu[5+lc])
@@ -63,32 +63,27 @@ func (s *smPureGo) Transmit(apdu []byte) (data []byte, sw uint16, err error) {
 			}
 		}
 	}
-	
+
 	// Wrap command with Secure Messaging
 	wrappedCmd, err := s.smCtx.WrapCommand(cla, ins, p1, p2, cmdData, le)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to wrap command: %w", err)
 	}
-	
-	logVerbose("[APDU] Wrapped: %X\n", wrappedCmd)
-	
+
 	// Transmit wrapped command to card
 	response, err := s.card.Transmit(wrappedCmd)
 	if err != nil {
 		return nil, 0, fmt.Errorf("card transmit failed: %w", err)
 	}
-	
-	logVerbose("[APDU] Response: %X\n", response)
-	
+
 	// Unwrap response
 	plainData, sw, err := s.smCtx.UnwrapResponse(response)
 	if err != nil {
 		logVerbose("[APDU] Unwrap error: %v\n", err)
 		return nil, 0, fmt.Errorf("failed to unwrap response: %w", err)
 	}
-	
-	logVerbose("[APDU] Plain response: data=%X sw=%04X\n", plainData, sw)
-	
+
+	logVerbose("[APDU] Response bytes: %d, sw=%04X\n", len(plainData), sw)
+
 	return plainData, sw, nil
 }
-

@@ -6,8 +6,8 @@ import (
 
 const (
 	// MaxSMLe is the maximum Le (expected length) for SM-wrapped APDUs.
-	// AES SM: ~231 bytes, 3DES SM: ~239 bytes. Use conservative value.
-	MaxSMLe = 231
+	// 223 plaintext bytes pad to 224; DO87 + DO99 + DO8E then fit in 255.
+	MaxSMLe = 223
 )
 
 // SMReadBinary reads binary data from the currently selected EF via Secure Messaging.
@@ -28,8 +28,7 @@ func SMReadBinary(sm SM, offset int, maxLength int) ([]byte, error) {
 			chunkSize = remaining
 		}
 
-		// Try reading with Le=0 first to get length hint
-		apdu := APDUReadBinary(currentOffset, 0)
+		apdu := APDUReadBinary(currentOffset, chunkSize)
 		data, sw, err := sm.Transmit(apdu)
 		if err != nil {
 			return nil, fmt.Errorf("SM transmit failed at offset %d: %w", currentOffset, err)
@@ -38,13 +37,16 @@ func SMReadBinary(sm SM, offset int, maxLength int) ([]byte, error) {
 		// Handle 6Cxx - wrong length, retry with correct Le
 		if IsWrongLength(sw) {
 			correctLen := GetCorrectLength(sw)
-			if correctLen > 0 && correctLen <= MaxSMLe {
+			if correctLen > 0 && correctLen <= chunkSize {
 				apdu = APDUReadBinary(currentOffset, correctLen)
 				data, sw, err = sm.Transmit(apdu)
 				if err != nil {
 					return nil, fmt.Errorf("SM transmit retry failed at offset %d: %w", currentOffset, err)
 				}
 			}
+		}
+		if len(data) > chunkSize {
+			return nil, fmt.Errorf("READ BINARY exceeded requested length")
 		}
 
 		// Check for success or EOF warning
@@ -80,7 +82,7 @@ func SMReadBinary(sm SM, offset int, maxLength int) ([]byte, error) {
 }
 
 // SMReadEF reads an entire EF via Secure Messaging.
-// First tries Le=0 to get length hint, then reads with proper chunking.
+// Uses bounded short APDUs that fit inside AES secure messaging.
 func SMReadEF(sm SM, maxSize int) ([]byte, error) {
 	if maxSize <= 0 {
 		maxSize = 512 // default for personal data fields
@@ -110,4 +112,3 @@ func SMSelectAndRead(sm SM, fid [2]byte, maxSize int) ([]byte, error) {
 
 	return data, nil
 }
-

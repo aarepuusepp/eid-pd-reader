@@ -19,7 +19,7 @@ import (
 
 // Version information
 const (
-	Version = "2.1.4"
+	Version = "2.1.5"
 	AppName = "eid-pd-reader"
 )
 
@@ -360,17 +360,31 @@ func main() {
 				"timestamp": startTime.Format("2006-01-02 15:04:05.00000"),
 				"duration":  esteid.FormatDuration(time.Since(startTime)),
 				"data": map[string]interface{}{
-					"protocol":     1,
-					"diagnostics":  esteid.Diagnostics(cfg.PKCS11.LibraryPath),
-					"version":      Version,
-					"name":         AppName,
-					"nativeApp":    Version,
-					"cdocVersions": []string{"1.0", "1.1"},
+					"protocol":           1,
+					"diagnostics":        esteid.Diagnostics(cfg.PKCS11.LibraryPath),
+					"version":            Version,
+					"name":               AppName,
+					"nativeApp":          Version,
+					"nfcCryptoSupported": true,
+					"cdocVersions":       []string{"1.0", "1.1"},
 				},
 			})
 
 		case "get-decrypt-certificate", "getTokenCertificate":
 			logger.LogNativeMessage("request", command, true, "")
+			if req.Mode != "" && req.Mode != "contact" && req.Mode != "nfc" {
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": "invalid card mode"})
+				continue
+			}
+			if req.Mode == "nfc" {
+				result, err := esteid.GetDecryptCertificateNFC(req.CAN)
+				if err != nil {
+					_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": err.Error()})
+				} else {
+					_ = writeNativeMessage(map[string]interface{}{"ok": true, "data": result})
+				}
+				continue
+			}
 			p11Cfg, err := esteid.ResolvePKCS11Config(
 				cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex,
 				req.PKCS11.LibraryPath, req.PKCS11.Slot, req.PKCS11.Label, req.PKCS11.KeyIDHex,
@@ -396,6 +410,19 @@ func main() {
 
 		case "unwrap-transport-key", "unwrapTransportKey":
 			logger.LogNativeMessage("request", command, true, "")
+			if req.Mode != "" && req.Mode != "contact" && req.Mode != "nfc" {
+				_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": "invalid card mode"})
+				continue
+			}
+			if req.Mode == "nfc" {
+				result, err := esteid.UnwrapTransportKeyNFC(req.CAN, req.Challenge, req.Certificate, req.Origin)
+				if err != nil {
+					_ = writeNativeMessage(map[string]interface{}{"ok": false, "error": err.Error(), "errorCode": esteid.PINErrorCode(err)})
+				} else {
+					_ = writeNativeMessage(map[string]interface{}{"ok": true, "data": result})
+				}
+				continue
+			}
 			p11Cfg, err := esteid.ResolvePKCS11Config(
 				cfg.PKCS11.LibraryPath, cfg.PKCS11.Slot, cfg.PKCS11.Label, cfg.PKCS11.KeyIDHex,
 				req.PKCS11.LibraryPath, req.PKCS11.Slot, req.PKCS11.Label, req.PKCS11.KeyIDHex,
@@ -475,6 +502,7 @@ func main() {
 			logger.LogNativeMessage("request", "capabilities", true, "")
 			caps := map[string]interface{}{
 				"nfcSupported":          isNFCSupported(),
+				"nfcCryptoSupported":    true,
 				"cdocDecryptSupported":  true,
 				"clientUnwrapSupported": true,
 				"pkcs11RSASupported":    true,

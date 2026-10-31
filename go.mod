@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/aarepuusepp/libcdoc-go/v2 v2.0.6
-	github.com/aarepuusepp/libopenpace-go v1.1.2
+	github.com/aarepuusepp/libopenpace-go v1.1.3
 	github.com/ebfe/scard v0.0.0-20241214075232-7af069cabc25
 	github.com/miekg/pkcs11 v1.1.2
 	golang.org/x/sys v0.49.0
@@ -19,4 +19,4 @@ require (
 )
 
 // Pinned source snapshot; see third_party/libopenpace-go/README.snapshot.md.
-replace github.com/aarepuusepp/libopenpace-go v1.1.2 => ./third_party/libopenpace-go
+replace github.com/aarepuusepp/libopenpace-go v1.1.3 => ./third_party/libopenpace-go

@@ -22,8 +22,8 @@ func logVerbose(format string, args ...interface{}) {
 }
 
 // ConnectAny connects to the first available NFC/contactless reader.
-// It waits for a card to be present and retries the power-on sequence
-// if the reader fails to reset the card (common with ACR1252 readers).
+// It waits for a card to be present and connects once per present reader.
+// The caller owns any retry after a power-on failure.
 // Returns PC/SC context, card connection, and reader name.
 func ConnectAny() (*scard.Context, *scard.Card, string, error) {
 	ctx, err := scard.EstablishContext()
@@ -65,9 +65,14 @@ func ConnectAny() (*scard.Context, *scard.Card, string, error) {
 	return ctx, card, readerName, nil
 }
 
-// waitAndConnect waits for a card to appear on one of the NFC readers,
-// then attempts to connect with retries for power-on failures.
-func waitAndConnect(ctx *scard.Context, readers []string) (*scard.Card, string, error) {
+type readerContext interface {
+	GetStatusChange([]scard.ReaderState, time.Duration) error
+	Connect(string, scard.ShareMode, scard.Protocol) (*scard.Card, error)
+}
+
+// waitAndConnect waits for card presence, then connects once per present reader.
+// Connection retries are owned by the caller, not this status-wait loop.
+func waitAndConnect(ctx readerContext, readers []string) (*scard.Card, string, error) {
 	// Build reader states for status monitoring
 	states := make([]scard.ReaderState, len(readers))
 	for i, r := range readers {
@@ -85,6 +90,7 @@ func waitAndConnect(ctx *scard.Context, readers []string) (*scard.Card, string, 
 	}
 
 	// If a card is already present on any reader, try to connect
+	var connectErr error
 	for i, st := range states {
 		if st.EventState&scard.StatePresent != 0 {
 			logVerbose("[NFC] Card already present on: %s\n", readers[i])
@@ -93,16 +99,20 @@ func waitAndConnect(ctx *scard.Context, readers []string) (*scard.Card, string, 
 				return card, readers[i], nil
 			}
 			logVerbose("[NFC] Connect failed on %s: %v\n", readers[i], err)
+			connectErr = err
 		}
 		// Update current state for the wait loop
-		states[i].CurrentState = st.EventState
+		states[i].CurrentState = st.EventState &^ scard.StateChanged
+	}
+	if connectErr != nil {
+		return nil, "", fmt.Errorf("NFC card connection failed: %w", connectErr)
 	}
 
 	// No card present yet — wait up to 5 seconds for a card to appear
 	logVerbose("[NFC] No card present, waiting up to 5s for card...\n")
 	err = ctx.GetStatusChange(states, 5*time.Second)
 	if err != nil {
-		return nil, "", fmt.Errorf("no NFC reader available or no card present (timeout waiting for card)")
+		return nil, "", fmt.Errorf("waiting for NFC card: %w", err)
 	}
 
 	for i, st := range states {
@@ -113,7 +123,11 @@ func waitAndConnect(ctx *scard.Context, readers []string) (*scard.Card, string, 
 				return card, readers[i], nil
 			}
 			logVerbose("[NFC] Connect failed on %s: %v\n", readers[i], err)
+			connectErr = err
 		}
+	}
+	if connectErr != nil {
+		return nil, "", fmt.Errorf("NFC card connection failed: %w", connectErr)
 	}
 
 	return nil, "", fmt.Errorf("no NFC reader available or no card present")
@@ -124,7 +138,7 @@ func waitAndConnect(ctx *scard.Context, readers []string) (*scard.Card, string, 
 // Event Viewer (the SCard service internally retries POWER commands).
 // To minimize this noise, we make exactly ONE attempt per call and rely
 // on the higher-level read retry loop for recovery.
-func connectSingle(ctx *scard.Context, reader string) (*scard.Card, error) {
+func connectSingle(ctx readerContext, reader string) (*scard.Card, error) {
 	time.Sleep(500 * time.Millisecond)
 
 	card, err := ctx.Connect(reader, scard.ShareShared, scard.ProtocolAny)
@@ -136,12 +150,17 @@ func connectSingle(ctx *scard.Context, reader string) (*scard.Card, error) {
 }
 
 // directConnect is the fallback when GetStatusChange is not supported.
-func directConnect(ctx *scard.Context, readers []string) (*scard.Card, string, error) {
+func directConnect(ctx readerContext, readers []string) (*scard.Card, string, error) {
+	var lastErr error
 	for _, r := range readers {
 		card, err := connectSingle(ctx, r)
 		if err == nil {
 			return card, r, nil
 		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return nil, "", fmt.Errorf("NFC card connection failed: %w", lastErr)
 	}
 	return nil, "", fmt.Errorf("no NFC reader available or no card present")
 }
@@ -149,6 +168,13 @@ func directConnect(ctx *scard.Context, readers []string) (*scard.Card, string, e
 // IsContactlessReader checks if a reader name suggests it's a contactless/NFC reader.
 func IsContactlessReader(readerName string) bool {
 	nameLower := strings.ToLower(readerName)
+	// The ACR1252 exposes both PICC and SAM slots with "CL Reader" in the name.
+	// Its SAM slot is a contact security module, not the card on the NFC antenna.
+	for _, part := range strings.Fields(nameLower) {
+		if part == "sam" {
+			return false
+		}
+	}
 	return strings.Contains(nameLower, "cl reader") ||
 		strings.Contains(nameLower, "picc") ||
 		strings.Contains(nameLower, "nfc") ||

@@ -1,10 +1,12 @@
 package esteid
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"ee.aarepuusepp.eid-pd-reader/native/nfc"
+	"github.com/ebfe/scard"
 )
 
 // ReadPersonalDataNFC reads personal data from an Estonian ID card via NFC using PACE + Secure Messaging.
@@ -17,6 +19,16 @@ func ReadPersonalDataNFC(can string) (*PersonalData, error) {
 // ReadPersonalDataNFCWithRetry reads personal data from an Estonian ID card via NFC with configurable retry count.
 // maxAttempts: total number of attempts (1 = no retry, 2 = 1 retry, etc.)
 func ReadPersonalDataNFCWithRetry(can string, maxAttempts int) (*PersonalData, error) {
+	return readNFCWithRetry(can, maxAttempts, attemptNFCRead, time.Sleep)
+}
+
+// Only connection failures are retried. Once PACE starts, retrying can repeat
+// authentication with the same incorrect CAN or hide a secure-messaging error.
+type nfcConnectionError struct{ error }
+
+func (e *nfcConnectionError) Unwrap() error { return e.error }
+
+func readNFCWithRetry(can string, maxAttempts int, read func(string, int) (*PersonalData, error), sleep func(time.Duration)) (*PersonalData, error) {
 	// Validate CAN
 	if len(can) != 6 {
 		return nil, fmt.Errorf("CAN must be exactly 6 digits")
@@ -26,7 +38,7 @@ func ReadPersonalDataNFCWithRetry(can string, maxAttempts int) (*PersonalData, e
 			return nil, fmt.Errorf("CAN must contain only digits")
 		}
 	}
-	
+
 	// Validate maxAttempts
 	if maxAttempts < 1 {
 		maxAttempts = 1
@@ -44,30 +56,60 @@ func ReadPersonalDataNFCWithRetry(can string, maxAttempts int) (*PersonalData, e
 		}
 		if attempt > 1 && retryDelays[delayIdx] > 0 {
 			logVerbose("Retrying NFC read (attempt %d/%d) in %v...\n", attempt, maxAttempts, retryDelays[delayIdx])
-			time.Sleep(retryDelays[delayIdx])
+			sleep(retryDelays[delayIdx])
 		}
 
-		pd, err := attemptNFCRead(can, attempt)
+		pd, err := read(can, attempt)
 		if err == nil {
 			return pd, nil
 		}
 
 		lastErr = err
+		var connectionErr *nfcConnectionError
+		if !errors.As(err, &connectionErr) {
+			return nil, err
+		}
 		logVerbose("Attempt %d/%d failed: %v\n", attempt, maxAttempts, err)
 	}
-	
+
 	return nil, fmt.Errorf("all NFC read attempts failed: %w", lastErr)
 }
 
 // attemptNFCRead performs a single NFC read attempt.
 func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
-	// Connect to NFC reader (ConnectAny waits for card presence and retries power-on)
+	// ConnectAny waits for presence and makes one connection attempt per reader.
 	ctx, card, readerName, err := nfc.ConnectAny()
 	if err != nil {
-		return nil, fmt.Errorf("NFC connection failed: %w", err)
+		return nil, &nfcConnectionError{fmt.Errorf("NFC connection failed: %w", err)}
 	}
 	defer ctx.Release()
-	defer card.Disconnect(2) // UnpowerCard — drops RF field without triggering a reset IOCTL
+	defer card.Disconnect(scard.LeaveCard)
+	return withNFCCardTransaction(card, func() (*PersonalData, error) {
+		return readNFCConnected(card, can, readerName, attemptNum)
+	})
+}
+
+// PACE and secure messaging share card state across many APDUs. Keep other
+// PC/SC clients (including Windows card discovery) out of the entire exchange.
+// Unpower before releasing the transaction so no other client inherits our SM
+// session. ACR1252 drivers can fail SCARD_RESET_CARD after a contactless read.
+func withNFCCardTransaction(card interface {
+	BeginTransaction() error
+	EndTransaction(scard.Disposition) error
+}, read func() (*PersonalData, error)) (pd *PersonalData, err error) {
+	if err = card.BeginTransaction(); err != nil {
+		return nil, fmt.Errorf("NFC transaction failed: %w", err)
+	}
+	defer func() {
+		if endErr := card.EndTransaction(scard.UnpowerCard); endErr != nil && err == nil {
+			pd = nil
+			err = fmt.Errorf("NFC transaction cleanup failed: %w", endErr)
+		}
+	}()
+	return read()
+}
+
+func readNFCConnected(card *scard.Card, can, readerName string, attemptNum int) (*PersonalData, error) {
 
 	logVerbose("Connected to NFC reader: %s (attempt %d)", readerName, attemptNum)
 
@@ -79,6 +121,10 @@ func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
 	}
 
 	logVerbose("PACE established successfully; Secure Messaging active")
+	return readNFCPersonalData(sm)
+}
+
+func readNFCPersonalData(sm nfc.SM) (*PersonalData, error) {
 
 	// Navigate to personal data directory before reading files.
 	// IDEMIA cards: personal data files 5001-5009 are under DF 5000 (direct child of MF).
@@ -140,7 +186,7 @@ func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
 	}
 
 	if !personalDataDirSelected {
-		logVerbose("Warning: could not select personal data directory, will try reading anyway")
+		return nil, fmt.Errorf("could not select NFC personal data directory")
 	}
 
 	// Read personal data fields
@@ -148,88 +194,52 @@ func attemptNFCRead(can string, attemptNum int) (*PersonalData, error) {
 		Source: "nfc:PACE+SM",
 	}
 
-	// Try two different approaches for Thales test cards
-	
-	// Approach 1: Try GET DATA commands (ISO 7816-4)
-	logVerbose("Trying GET DATA approach...")
-	getDataFields := []struct {
-		tag  [2]byte // BER-TLV tag
+	// The documented personal-data EFs are selected above. Read them directly;
+	// GET DATA probes add six exchanges and can skip document fields on partial results.
+
+	filesAccessed := 0
+	fields := []struct {
+		fid  [2]byte
 		name string
 		dest *string
 	}{
-		{[2]byte{0x5F, 0x0E}, "Surname", &pd.Surname},           // Tag 5F0E
-		{[2]byte{0x5F, 0x0F}, "Given Name", &pd.GivenName},      // Tag 5F0F
-		{[2]byte{0x5F, 0x35}, "Sex", &pd.Sex},                   // Tag 5F35
-		{[2]byte{0x5F, 0x28}, "Citizenship", &pd.Citizenship},   // Tag 5F28
-		{[2]byte{0x5F, 0x2B}, "Birth Date", &pd.BirthDate},      // Tag 5F2B
-		{[2]byte{0x5F, 0x2E}, "Personal Code", &pd.PersonalCode}, // Tag 5F2E (custom)
+		{FID_SURNAME, "Surname", &pd.Surname},
+		{FID_GIVENNAME, "Given Name", &pd.GivenName},
+		{FID_SEX, "Sex", &pd.Sex},
+		{FID_CITIZENSHIP, "Citizenship", &pd.Citizenship},
+		{FID_BIRTHDATE, "Birth Date", &pd.BirthDate},
+		{FID_PERSONALCODE, "Personal Code", &pd.PersonalCode},
+		{FID_DOCUMENTNR, "Document Number", &pd.DocumentNr},
+		{FID_EXPIRYDATE, "Expiry Date", &pd.ExpiryDate},
+		{FID_ISSUEDATE, "Issue Date", &pd.IssueDate},
 	}
-	
-	for _, field := range getDataFields {
-		logVerbose("Trying GET DATA for %s (tag=%02X%02X) via SM", field.name, field.tag[0], field.tag[1])
-		
-		// Build GET DATA APDU: 00 CA <tag> 00
-		apdu := []byte{0x00, 0xCA, field.tag[0], field.tag[1], 0x00}
-		data, sw, err := sm.Transmit(apdu)
-		
-		if err == nil && IsSuccess(sw) && len(data) > 0 {
-			text := BytesToCleanText(data)
-			*field.dest = text
-			logVerbose("  %s: %s", field.name, text)
-		} else {
-			logVerbose("  GET DATA failed for %s: SW=%04X", field.name, sw)
+
+	for _, field := range fields {
+		logVerbose("Reading %s (FID=%02X%02X) via SM", field.name, field.fid[0], field.fid[1])
+
+		data, err := nfc.SMSelectAndRead(sm, field.fid, 512)
+		if err != nil {
+			logVerbose("Warning: failed to read %s: %v", field.name, err)
+			continue
 		}
+
+		filesAccessed++
+		text := BytesToCleanText(data)
+		*field.dest = text
+		logVerbose("  %s: %d bytes", field.name, len(data))
 	}
-	
-	// If GET DATA didn't work, try SELECT+READ approach
-	if pd.Surname == "" && pd.GivenName == "" {
-		logVerbose("GET DATA approach failed, trying SELECT+READ...")
 
-		filesAccessed := 0
-		fields := []struct {
-			fid  [2]byte
-			name string
-			dest *string
-		}{
-			{FID_SURNAME, "Surname", &pd.Surname},
-			{FID_GIVENNAME, "Given Name", &pd.GivenName},
-			{FID_SEX, "Sex", &pd.Sex},
-			{FID_CITIZENSHIP, "Citizenship", &pd.Citizenship},
-			{FID_BIRTHDATE, "Birth Date", &pd.BirthDate},
-			{FID_PERSONALCODE, "Personal Code", &pd.PersonalCode},
-			{FID_DOCUMENTNR, "Document Number", &pd.DocumentNr},
-			{FID_EXPIRYDATE, "Expiry Date", &pd.ExpiryDate},
-			{FID_ISSUEDATE, "Issue Date", &pd.IssueDate},
-		}
-
-		for _, field := range fields {
-			logVerbose("Reading %s (FID=%02X%02X) via SM", field.name, field.fid[0], field.fid[1])
-
-			data, err := nfc.SMSelectAndRead(sm, field.fid, 512)
-			if err != nil {
-				logVerbose("Warning: failed to read %s: %v", field.name, err)
-				continue
-			}
-
-			filesAccessed++
-			text := BytesToCleanText(data)
-			*field.dest = text
-			logVerbose("  %s: %s", field.name, text)
-		}
-
-		// If files were accessible but empty, the card has no personal data — not an error
-		if filesAccessed > 0 && pd.Surname == "" && pd.GivenName == "" && pd.PersonalCode == "" {
-			logVerbose("Card files accessible but contain no personal data (unpersonalized or test card)")
-			return pd, nil
-		}
+	// If files were accessible but empty, the card has no personal data — not an error
+	if filesAccessed > 0 && pd.Surname == "" && pd.GivenName == "" && pd.PersonalCode == "" {
+		logVerbose("Card files accessible but contain no personal data (unpersonalized or test card)")
+		return pd, nil
 	}
 
 	if pd.Surname == "" && pd.GivenName == "" && pd.PersonalCode == "" {
-		return nil, fmt.Errorf("failed to read any personal data fields (tried GET DATA and SELECT+READ)")
+		return nil, fmt.Errorf("failed to read any NFC personal data fields")
 	}
 
 	logVerbose("NFC read complete via PACE+SM")
 
 	return pd, nil
 }
-

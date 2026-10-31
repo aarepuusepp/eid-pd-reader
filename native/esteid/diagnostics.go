@@ -2,14 +2,18 @@ package esteid
 
 import (
 	"debug/pe"
+	"ee.aarepuusepp.eid-pd-reader/native/nfc"
 	"github.com/ebfe/scard"
 	"os"
+	"strings"
 )
 
 // Diagnostics only checks reader/card presence and the library architecture.
 // It does not connect to a card, read identifiers/certificates or request a PIN.
 func Diagnostics(library string) map[string]interface{} {
 	result := map[string]interface{}{"readerCount": 0, "cardPresent": false, "pcscAvailable": false, "pkcs11State": "missing"}
+	result["nfcReaderCount"], result["contactReaderCount"] = 0, 0
+	result["nfcCardPresent"], result["contactCardPresent"] = false, false
 	if library == "" {
 		library = DefaultPKCS11LibraryPath()
 	}
@@ -28,6 +32,13 @@ func Diagnostics(library string) map[string]interface{} {
 	result["readerCount"] = len(readers)
 	states := make([]scard.ReaderState, len(readers))
 	for i, name := range readers {
+		if !strings.Contains(strings.ToLower(name), "sam") {
+			key := "contactReaderCount"
+			if nfc.IsContactlessReader(name) {
+				key = "nfcReaderCount"
+			}
+			result[key] = result[key].(int) + 1
+		}
 		states[i].Reader = name
 		states[i].CurrentState = scard.StateUnaware
 	}
@@ -35,6 +46,13 @@ func Diagnostics(library string) map[string]interface{} {
 		for _, state := range states {
 			if state.EventState&scard.StatePresent != 0 {
 				result["cardPresent"] = true
+				if !strings.Contains(strings.ToLower(state.Reader), "sam") {
+					key := "contactCardPresent"
+					if nfc.IsContactlessReader(state.Reader) {
+						key = "nfcCardPresent"
+					}
+					result[key] = true
+				}
 			}
 		}
 	}
