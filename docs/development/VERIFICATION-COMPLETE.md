@@ -1,3 +1,5 @@
+> Historical investigation/development record. Commands, versions and completion claims describe that record, not the current release. Use [current README](../../README.md) for supported setup and API boundaries.
+
 # Housekeeping Verification Complete ✅
 
 **Date:** 2024-11-13  

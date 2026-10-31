@@ -1,3 +1,5 @@
+> Historical development record. Use [current reader README](../../README.md) for supported setup; these notes are not current installation/API instructions.
+
 # Pure Go PACE Implementation - Test Results
 
 **Date:** November 15, 2025  

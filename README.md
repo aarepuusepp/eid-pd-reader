@@ -1,324 +1,96 @@
-# eid-pd-reader - Estonian ID Card Personal Data Reader
+# EID-PD reader 2.1.10
 
-Native helper application for reading personal data from Estonian ID cards.
+Windows x64 native host: `ee.aarepuusepp.eid_pd_reader`. Package/reader 2.1.10,
+extension 2.1.6, web SDK 1.0.2. Dependencies: published libcdoc-go 2.0.8 and
+vendored libopenpace-go 1.1.3. Reads ID-card data and performs local CDOC1/CDOC2
+private-key operations over contact or supported NFC sessions.
 
-Current source version: **2.1.10**; see [release notes](RELEASE-2.1.10.md).
+## Installation and update
 
-NFC certificate reading and CDOC decryption are available in the development
-build; see [supported profiles and manual acceptance](docs/NFC-CRYPTO.md).
+Use the [eid-pd-installer](https://bitbucket.org/aarepuusepp/eid-pd-installer)
+Windows EXE. It replaces managed files in `C:\Program Files\eid-pd-reader`,
+removes obsolete payloads after success and generates/registers host manifests.
+Admin configuration/policy lives in `%ProgramData%\eid-pd-reader`. No versions
+subdirectory is used. The generated installation.html gives exact browser paths.
 
-## Overview
+Chrome/Edge load the generated chromium directory in developer mode. Firefox
+loads firefox/manifest.json through about:debugging; temporary add-ons must be
+loaded again after a Firefox restart. Reload application tabs after updates.
+Users do not edit extension IDs/manifests/registry. Public signing/store delivery
+is separate from development installation.
 
-The eid-pd-reader is a Go-based native application that communicates with PC/SC card readers to extract personal data from Estonian ID cards. It supports both contact and contactless (NFC) reading modes.
+Windows PC/SC and matching reader drivers are required. Contact crypto needs a
+compatible x64 PKCS#11 module. Personal-data and crypto readiness are separate.
+Linux/macOS code exists, but this package and acceptance cover Windows x64 only.
 
-## Features
+## Build and test
 
-- **Contact Reading:** Direct reading via contact card readers
-- **NFC Reading:** Built-in contactless reading with pure Go PACE protocol implementation
-- **Multiple Card Types:** Support for IDEMIA, Thales, and other Estonian ID cards
-- **Configurable:** YAML-based configuration
-- **Cross-Platform:** Windows, Linux, macOS
-- **Pure Go:** No C dependencies except PC/SC (uses libopenpace-go for PACE protocol)
+Go 1.27.3+, Windows x64 C compiler and PC/SC. Adjust compiler path as needed:
 
-## Reproducible source dependencies
-
-`libcdoc-go/v2 v2.0.8` is a published Go module and is downloaded using `go.sum`.
-No sibling `libcdoc-go` checkout or Go workspace is needed. The pinned
-`libopenpace-go v1.1.3` source remains in `third_party/libopenpace-go` with provenance
-and its original license. Build with `GOWORK=off` to avoid local workspace overrides.
-
-## Installation
-
-### Windows
-
-**Quick Install (from source):**
-
-```cmd
-REM Build release package
-build-release.cmd
-
-REM Install (run as Administrator)
-cd build
-install-reader.cmd
+```powershell
+$env:GOWORK = 'off'
+$env:CGO_ENABLED = '1'
+$env:CC = 'C:\msys64-2\ucrt64\bin\gcc.exe'
+$env:PATH = (Split-Path $env:CC) + ';' + $env:PATH
+New-Item -ItemType Directory -Force .local | Out-Null
+go mod verify
+go test -race ./...
+go vet ./...
+go build -o .local/eid-pd-reader.exe ./cmd/eid-pd-reader
 ```
 
-**Manual Install:**
+For the complete WinUI PIN dialog/maintenance/browser package, clone reader,
+extension and installer as siblings and run `pwsh -File build-installer.ps1`
+from installer. That builder also needs Node.js, .NET 10 SDK and NSIS.
+Legacy install-reader/build-release scripts are not the current workstation
+packaging path. No sibling libcdoc checkout is required.
 
-```cmd
-REM Build executable
-go build -o eid-pd-reader.exe ./cmd/eid-pd-reader
+## Use and diagnostics
 
-REM Install (run as Administrator)
-install-reader.cmd
+Applications bundle web-eid-pd.js and use status, readPersonalData, readAllReaders,
+getDecryptCertificate and unwrapTransportKey. The extension enforces top-level
+HTTPS origin and machine/site policy on each operation. No shared cross-site
+personal-data cache is used. Native messaging uses length-prefixed JSON and is
+not a localhost HTTP service.
+
+PIN1 belongs only in the native WinUI prompt (60-second deadline). Web callers
+must not send pin, PKCS#11 paths or arbitrary native commands. NFC CAN stays only
+for the operation and must not reach the backend. status reads no personal data
+and asks for no PIN. Legacy APIs share the same policy checks.
+
+```powershell
+& 'C:\Program Files\eid-pd-reader\eid-pd-reader.exe' --version
+& 'C:\Program Files\eid-pd-reader\eid-pd-reader.exe' --help
+# Explicitly reads personal data to stdout; use only for an intended local test:
+& 'C:\Program Files\eid-pd-reader\eid-pd-reader.exe' --dump
 ```
 
-This will:
-- Copy the executable to `C:\Program Files\eid-pd-reader\`
-- Install host manifests for Chrome/Edge and Firefox
-- Register with Windows Registry
-
-### Linux
-
-```bash
-go build -o eid-pd-reader ./cmd/eid-pd-reader
-./ops/install-host.sh
-```
-
-### macOS
-
-```bash
-go build -o eid-pd-reader ./cmd/eid-pd-reader
-./ops/install-host.sh
-```
-
-## Configuration
-
-Create a `config.yaml` file:
-
-```yaml
-logging:
-  enabled: true
-  level: info
-  file: ""
-
-card:
-  timeout_seconds: 30
-  retry_attempts: 3
-
-cache:
-  enabled: true
-  duration_seconds: 300
-```
-
-See [Configuration Guide](./docs/guides/CONFIG-GUIDE.md) for details.
-
-## Usage
-
-### Command Line
-
-```bash
-# Show help
-eid-pd-reader.exe
-
-# Read card data
-eid-pd-reader.exe --dump
-
-# With NFC
-eid-pd-reader.exe --dump --nfc --can 123456
-
-# Read from all available readers
-eid-pd-reader.exe --dump --all-readers
-
-# Verbose mode
-eid-pd-reader.exe --dump --verbose
-
-# Debug mode (show card structure)
-eid-pd-reader.exe --debug
-
-# Show version
-eid-pd-reader.exe --version
-```
-
-Running without parameters displays usage help with all available options.
-
-### Native Messaging
-
-The reader communicates with the browser extension via native messaging protocol.
-
-Request:
-```json
-{
-  "command": "readPersonalData",
-  "mode": "contact"
-}
-```
-
-Response:
-```json
-{
-    "ok": true,
-    "data": {
-        "surname": "JÕEORG",
-        "givenName": "JAAK-KRISTJAN",
-        "sex": "M",
-        "citizenship": "EST",
-        "birthDate": "01 08 1980",
-        "personalCode": "38001085718",
-        "documentNr": "AT0000222",
-        "expiryDate": "09 12 2029",
-        "issueDate": "09 12 2024",
-        "source": "chip:Thales"
-    }
-}
-```
-
-Decryption request:
-```json
-{
-  "command": "decryptContainer",
-  "containerBase64": "base64-encoded-cdoc",
-  "pin": "1234",
-  "pkcs11": {
-    "libraryPath": "C:\\Program Files\\OpenSC Project\\OpenSC\\pkcs11\\opensc-pkcs11.dll",
-    "slot": 0,
-    "label": "",
-    "keyIdHex": ""
-  }
-}
-```
-
-The `pkcs11` object can be omitted when `config.yaml` contains `pkcs11.library_path`. PIN1 is never read from config and must be supplied per request.
-
-PKCS#11 decryption supports RSA keys and EC keys through `CKM_ECDH1_DERIVE`. EC token compatibility depends on the local PKCS#11 module allowing the derived shared secret to be read from the temporary session key.
-
-## Building
-
-NFC support is built-in using the pure Go `libopenpace-go` library. No special build steps required.
-
-```bash
-# Standard build (includes NFC support)
-go mod tidy
-go build -o eid-pd-reader.exe ./cmd/eid-pd-reader   # Windows
-go build -o eid-pd-reader ./cmd/eid-pd-reader       # Linux/macOS
-
-# Or use the build script (Windows)
-.\build.ps1
-
-# Run tests
-go test ./...
-```
-
-### Release Build (Windows)
-
-To create a complete release package with all installable files:
-
-```cmd
-build-release.cmd
-```
-
-This creates a `build` folder containing:
-- `eid-pd-reader.exe` - Native helper executable
-- `ee.aarepuusepp.eid_pd_reader.json` - Chrome/Edge manifest
-- `ee.aarepuusepp.eid_pd_reader.firefox.json` - Firefox manifest
-- `install-reader.cmd` - Installation script
-- `uninstall-reader.cmd` - Uninstallation script
-
-The reader automatically detects if a card requires PACE (NFC) and uses the appropriate protocol.
-
-## Project Structure
-
-```
-eid-pd-reader/
-├── cmd/
-│   └── eid-pd-reader/      # Main application entry point
-│       └── main.go
-├── native/
-│   ├── apdu/               # APDU command handling
-│   ├── config/             # Configuration management
-│   ├── esteid/             # Estonian ID card reading logic
-│   ├── logger/             # Logging utilities
-│   └── nfc/                # NFC/PACE protocol support
-├── host-manifests/         # Browser native messaging manifests
-├── ops/                    # Operational scripts
-├── docs/                   # Documentation
-├── build-release.cmd       # Release build script
-├── install-reader.cmd      # Installation script
-└── uninstall-reader.cmd    # Uninstallation script
-```
-
-## Extension ID Configuration
-
-After installing the browser extension, you need to configure the extension ID in the host manifest:
-
-1. Get your extension ID from browser
-2. Update `host-manifests/ee.aarepuusepp.eid_pd_reader.json`
-3. Replace `YOUR_EXTENSION_ID` with actual ID
-
-See [Extension ID Configuration Guide](./docs/guides/EXTENSION-ID-CONFIGURATION.md) for details.
-
-## Supported Cards
-
-- IDEMIA Cosmo 8.1/8.2
-- IDEMIA Cosmo X
-- Thales (Gemalto) cards
-- Standard Estonian ID cards
-
-See [Supported Cards](./docs/reference/SUPPORTED-CARDS.md) for details.
-
-## Documentation
-
-- [Configuration Guide](./docs/guides/CONFIG-GUIDE.md)
-- [Supported Cards](./docs/reference/SUPPORTED-CARDS.md)
-- [Troubleshooting](./docs/reference/TROUBLESHOOTING.md)
-- [Security](./docs/reference/SECURITY.md)
-- [NFC Implementation](./docs/development/NFC-IMPLEMENTATION-SUMMARY.md)
-- [Development Docs](./docs/development/)
-
-## Requirements
-
-### Windows
-- Windows 10/11 (64-bit)
-- PC/SC smart card service (built-in)
-
-### Linux
-- PC/SC Lite: `sudo apt-get install pcscd libpcsclite-dev`
-- Go 1.27.3+ (for building from source)
-
-### macOS
-- macOS 10.15+ (Catalina or later)
-- PC/SC framework (built-in)
-
-## Troubleshooting
-
-### Card Not Detected
-- Ensure card reader is connected
-- Check PC/SC service is running
-- Try `--verbose` flag for detailed logs
-
-### NFC Reading Fails
-- Verify CAN (Card Access Number) is correct
-- Ensure card is properly positioned on reader
-- Check reader supports NFC/contactless
-
-See [Troubleshooting Guide](./docs/reference/TROUBLESHOOTING.md) for more.
-
-## Related Components
-
-- [eid-pd-extension](../eid-pd-extension/) - Browser extension component
-- [libopenpace-go](../libopenpace-go/) - PACE protocol library
-
-## License
-
-MIT License
-
-## Support
-
-- **Issues:** [GitHub Issues](https://github.com/aarepuusepp/web-eid-pd/issues)
-- **Email:** aare.puusepp@gmail.com
-
-## Version
-
-Current version: 2.0.1
-
-See [Release Notes](./docs/releases/) for changelog.
-
-## Technical Details
-
-### NFC/PACE Support
-
-The reader uses the pure Go `libopenpace-go` library for PACE (Password Authenticated Connection Establishment) protocol support. This means:
-
-- **No C dependencies** for PACE protocol (previously required OpenPACE C library)
-- **Easier builds** across all platforms
-- **Better integration** with Go toolchain
-- **Automatic protocol detection** - the reader detects if PACE is needed and applies it transparently
-
-The PACE implementation supports:
-- Brainpool curves (BP256R1, BP320R1, BP384R1, BP512R1)
-- AES encryption (AES-128, AES-192, AES-256)
-- Automatic CAN (Card Access Number) handling
-
-See [libopenpace-go](../libopenpace-go/) for more details on the PACE implementation.
-
-
-The workstation package and reader share the same release version. Browser extensions are versioned independently because they are also distributed through browser stores.
+Without diagnostic flags, the executable waits for native messages; it does not
+print a menu. For direct NFC developer tests use --nfc --can-env with an ephemeral
+environment variable. Normal users enter CAN in the application. Verbose/debug
+output can contain card data and must stay local.
+
+## Configuration and access policy
+
+HKLM machine policy takes precedence over administrator-managed ProgramData
+policy.json. Blocked origin wins, then allowed origin, then defaultAction
+(ask/allow/deny). Malformed policy denies operations. Personal-data/decrypt user
+grants are separate. See installer DEPLOYMENT.md for registry values, ACLs, silent
+install, repair, rollback and uninstall. Runtime config.yaml sets card/logging/
+PKCS#11 defaults; it does not grant website access or accept a stored PIN.
+
+## Evidence and documentation
+
+Contact CDOC1 and IDEMIA NFC data/CDOC1/CDOC2 paths have separately recorded
+card tests. Do not infer all Thales/test-card profiles from these results.
+The user confirmed standalone CDOC2 roundtrip in Digisign and reading in Visitor
+with installed package 2.1.10; browser/transport was unspecified in that report.
+
+- [Release notes](RELEASE-2.1.10.md)
+- [NFC crypto and evidence](docs/NFC-CRYPTO.md)
+- [Direct NFC tests](docs/DIRECT-NFC-TEST.md)
+- [Documentation index](docs/README.md)
+- [PIN dialog build](pin-ui/README.md)
+
+MIT license: LICENSE. Current installation authority is the installer README;
+SDK API authority is the extension repository's web-eid-pd/README.md.

@@ -1,3 +1,5 @@
+> Historical browser investigation. For current Windows package installation, identities and distribution use [reader README](../../README.md) and installer deployment instructions. Browser versions below are recorded test versions, not latest releases.
+
 # Firefox Extension Distribution Guide
 
 ## Overview

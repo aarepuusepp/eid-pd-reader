@@ -1,3 +1,5 @@
+> Historical prototype specification. Its Go version, cache/API and manual host-install snippets are not current integration instructions. See [current reader](../../README.md) and the extension-owned SDK guide.
+
 # WebEID Personal Data Fallback (Go native helper + Extension API)
 
 A minimal **native helper** (Go, PC/SC) + **browser extension API** (Manifest V3) to read **Estonian ID‑card Personal Data** files (surname, given name, personal code) directly from the chip **even when certificates are missing**, and expose them to your web app via a safe background bridge.

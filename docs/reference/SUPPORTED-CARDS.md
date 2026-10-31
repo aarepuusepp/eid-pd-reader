@@ -1,6 +1,6 @@
 # Supported Estonian ID Cards
 
-`eid-pd-reader` supports all current Estonian ID card types with automatic card detection and optimized reading strategies.
+`eid-pd-reader` contains IDEMIA/Thales detection and reading strategies. This is an implementation inventory, not a guarantee for every card profile. The tested Windows 2.1.10 scope and separate NFC evidence are in [the current guide](../../README.md) and [NFC-CRYPTO](../NFC-CRYPTO.md).
 
 ## Supported Card Types
 
@@ -34,7 +34,7 @@ The helper automatically detects card type using the ATR (Answer To Reset) and a
 1. **ATR-based detection**: Identifies card manufacturer from ATR bytes
 2. **Optimized strategy first**: Uses manufacturer-specific commands for fast reading
 3. **Fallback strategies**: If optimized strategy fails, tries generic methods
-4. **Universal compatibility**: Works with unknown cards using standard ISO 7816 commands
+4. **Generic fallback**: Attempts standard commands for unknown cards; success is not guaranteed
 
 ## Reading Strategies
 

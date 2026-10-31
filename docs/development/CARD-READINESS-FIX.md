@@ -1,3 +1,5 @@
+> Historical development record. Use [current reader README](../../README.md) for supported setup; these notes are not current installation/API instructions.
+
 # Card Readiness Fix - Preventing Corrupted Data Reads
 
 **Date:** November 14, 2025  

@@ -1,3 +1,5 @@
+> Historical investigation/development record. Commands, versions and completion claims describe that record, not the current release. Use [current README](../../README.md) for supported setup and API boundaries.
+
 # Fix for Corrupted Data When Reading Card Immediately After Insertion
 
 **Date:** November 14, 2025  

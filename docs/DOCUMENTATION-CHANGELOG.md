@@ -440,5 +440,5 @@ This documentation update provides comprehensive coverage for developers integra
 
 ---
 
-**Questions?** See [INTEGRATION-SUMMARY.md](INTEGRATION-SUMMARY.md) for the complete documentation index.
+**Questions?** See [INTEGRATION-SUMMARY.md](README.md) for the complete documentation index.
 

@@ -1,6 +1,6 @@
 # EstEID Client CDOC Decrypt — Manual QA Matrix
 
-> **Full install/configure/publish guide:** [`docs/CLIENT_DECRYPT_INSTALLATION_GUIDE.md`](../../../../docs/CLIENT_DECRYPT_INSTALLATION_GUIDE.md) (workspace root)
+> **Full install/configure/publish guide:** [`docs/CLIENT_DECRYPT_INSTALLATION_GUIDE.md`](NFC-CRYPTO.md) (workspace root)
 
 Scope: CDOC **1.0** and **1.1** only.
 

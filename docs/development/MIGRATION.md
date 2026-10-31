@@ -1,3 +1,5 @@
+> Historical development record. Use [current reader README](../../README.md) for supported setup; these notes are not current installation/API instructions.
+
 # Migration Guide — Integrating WebEID PD Fallback
 
 This guide explains how to integrate the WebEID Personal Data fallback into an existing web application that uses `web-eid.js` for certificate-based identity verification.
