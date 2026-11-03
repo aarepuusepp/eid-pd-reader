@@ -1,7 +1,7 @@
 # Browser support for the Windows workstation package
 
 The development distribution targets Chrome, Edge and Firefox on Windows x64.
-Package/reader: 2.1.10. Extension: 2.1.6. Website SDK: 1.0.2.
+Package/reader: 2.1.11. Extension: 2.1.6. Separately released website SDK: 1.0.3.
 Use installer-generated Chromium/Firefox directories and native registrations.
 [Current setup](../../README.md#installation-and-update).
 

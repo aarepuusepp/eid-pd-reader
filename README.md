@@ -1,7 +1,7 @@
 # EID-PD reader 2.1.11
 
 Windows x64 native host: `ee.aarepuusepp.eid_pd_reader`. Package/reader 2.1.11,
-extension 2.1.6, web SDK 1.0.2. Dependencies: published libcdoc-go 2.0.8 and
+extension 2.1.6, separately released web SDK 1.0.3. Dependencies: published libcdoc-go 2.0.8 and
 vendored libopenpace-go 1.1.3. Reads ID-card data and performs local CDOC1/CDOC2
 private-key operations over contact or supported NFC sessions.
 
@@ -93,4 +93,4 @@ with installed package 2.1.10; browser/transport was unspecified in that report.
 - [PIN dialog build](pin-ui/README.md)
 
 MIT license: LICENSE. Current installation authority is the installer README;
-SDK API authority is the extension repository's web-eid-pd/README.md.
+SDK API authority is the [separate SDK repository](https://github.com/aarepuusepp/web-eid-pd.js).
