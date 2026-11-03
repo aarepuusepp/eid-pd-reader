@@ -19,7 +19,7 @@ import (
 
 // Version information
 const (
-	Version = "2.1.10"
+	Version = "2.1.11"
 	AppName = "eid-pd-reader"
 )
 
@@ -83,6 +83,7 @@ func main() {
 	noLog := flag.Bool("nolog", false, "Disable logging (overrides config file)")
 	configPath := flag.String("config", "", "Path to config.yaml file")
 	versionFlag := flag.Bool("version", false, "Show version information and exit")
+	checkPKCS11 := flag.Bool("check-pkcs11", false, "Check machine PKCS#11 library without accessing a card or requesting a PIN")
 	nfcFlag := flag.Bool("nfc", false, "Use NFC mode with PACE (requires --can)")
 	canFlag := flag.String("can", "", "Card Access Number (6 digits) for NFC/PACE")
 	canEnv := flag.String("can-env", "", "Environment variable name containing CAN")
@@ -105,6 +106,15 @@ func main() {
 		}
 	}
 	cfg, err := config.Load(*configPath)
+	if *checkPKCS11 {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(20)
+		}
+		path, state, code := esteid.CheckPKCS11(cfg.PKCS11.LibraryPath)
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"libraryPath": path, "pkcs11State": state})
+		os.Exit(code)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
 		cfg = config.Default()

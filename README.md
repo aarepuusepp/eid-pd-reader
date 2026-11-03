@@ -1,6 +1,6 @@
-# EID-PD reader 2.1.10
+# EID-PD reader 2.1.11
 
-Windows x64 native host: `ee.aarepuusepp.eid_pd_reader`. Package/reader 2.1.10,
+Windows x64 native host: `ee.aarepuusepp.eid_pd_reader`. Package/reader 2.1.11,
 extension 2.1.6, web SDK 1.0.2. Dependencies: published libcdoc-go 2.0.8 and
 vendored libopenpace-go 1.1.3. Reads ID-card data and performs local CDOC1/CDOC2
 private-key operations over contact or supported NFC sessions.
@@ -86,7 +86,7 @@ card tests. Do not infer all Thales/test-card profiles from these results.
 The user confirmed standalone CDOC2 roundtrip in Digisign and reading in Visitor
 with installed package 2.1.10; browser/transport was unspecified in that report.
 
-- [Release notes](RELEASE-2.1.10.md)
+- [Release notes](RELEASE-2.1.11.md)
 - [NFC crypto and evidence](docs/NFC-CRYPTO.md)
 - [Direct NFC tests](docs/DIRECT-NFC-TEST.md)
 - [Documentation index](docs/README.md)

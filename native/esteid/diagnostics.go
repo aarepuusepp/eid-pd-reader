@@ -79,3 +79,31 @@ func pkcs11State(library string) string {
 	}
 	return "ready"
 }
+
+// CheckPKCS11 is the installer probe. It never opens a card session. A broken
+// explicit administrator path is distinct from missing auto-detected middleware.
+func CheckPKCS11(configured string) (path, state string, exitCode int) {
+	path = configured
+	if path == "" {
+		path = DefaultPKCS11LibraryPath()
+	}
+	state = pkcs11State(path)
+	return path, state, pkcs11ExitCode(state, configured != "")
+}
+
+func pkcs11ExitCode(state string, configured bool) int {
+	if state == "ready" {
+		return 0
+	}
+	if configured {
+		return 20
+	}
+	switch state {
+	case "missing":
+		return 10
+	case "wrong_architecture":
+		return 11
+	default:
+		return 12
+	}
+}
